@@ -104,9 +104,9 @@ class EEG98(EEG):
 
     def _convert(self, bin_data):
         data = Packet.int24to32(bin_data)
-        n_chan = 9
+        n_chan = -1
         v_ref = 2.4
-        n_packet = -1
+        n_packet = 16
         data = data.reshape((n_packet, n_chan)).astype(np.float).T
         self.data = data[1:, :] * v_ref / ((2 ** 23) - 1) * 6. / 32.
         self.status = data[0, :]

@@ -50,7 +50,8 @@ output/*.html
 output/*/index.html
 
 # Sphinx
-docs/_build
+docs/_build-0.00053387  0.          0.          0.          0.          0.
+  0.          0.      
 
 .DS_Store
 *~
@@ -66,3 +67,6 @@ docs/_build
 
 # Mypy Cache
 .mypy_cache/
+
+src/explorepy/test*_eeg.csv
+src/explorepy/test*_orn.csv

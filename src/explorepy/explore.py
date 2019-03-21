@@ -162,7 +162,37 @@ class Explore:
 
         """
         pass
+    def passParameters(self, device_id = 0, parameter2send = "$salam!?n"):
+        r"""
+        sends a set of parameters to the device
+        Returns:
 
+        """
+        self.socket = self.device[device_id].bt_connect()
+
+        if self.parser is None:
+            self.parser = Parser(self.socket)
+
+        is_sending = True
+        send_counter = 0
+        print("sending to the device...")
+        while is_sending:
+            try:
+                ret = self.socket.send(parameter2send)
+                send_counter += 1
+                print("one message was sent to the device...")
+                if send_counter is 11:
+                    is_sending = 0
+            except ValueError:
+                # If value error happens, scan again for devices and try to reconnect (see reconnect function)
+                print("failed to send the parameters, refresh the connection and try another time ")
+                self.socket = self.device[device_id].bt_connect()
+                time.sleep(1)
+
+            except bluetooth.BluetoothError as error:
+                print("Bluetooth Error: Probably timeout, attempting reconnect. Error: ", error)
+                self.socket = self.device[device_id].bt_connect()
+                time.sleep(1)
 
 if __name__ == '__main__':
     pass

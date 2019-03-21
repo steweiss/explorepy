@@ -80,7 +80,7 @@ class EEG94(EEG):
         v_ref = 2.4
         n_packet = 33
         data = data.reshape((n_packet, n_chan)).astype(np.float).T
-        self.data = data[1:, :] * v_ref / (((2 ** 23) - 1) * 12)
+        self.data = data[1:, :] * v_ref / (((2 ** 23) - 1) * 1.)
         self.dataStatus = data[0, :]
 
     def _check_fletcher(self, fletcher):
@@ -108,7 +108,7 @@ class EEG98(EEG):
         v_ref = 2.4
         n_packet = 16
         data = data.reshape((n_packet, n_chan)).astype(np.float).T
-        self.data = data[1:, :] * v_ref / (((2 ** 23) - 1) *1.)
+        self.data = np.around(data[1:, :] * 1000. * v_ref / (((2 ** 23) - 1) *1.), decimals=3)
         self.status = data[0, :]
 
     def _check_fletcher(self, fletcher):
@@ -128,7 +128,7 @@ class EEG99s(EEG):
     def __init__(self, timestamp, payload):
         super().__init__(timestamp, payload)
         self._convert(payload[:-4])
-        self._check_fletcher(payload[-4:])
+        self._check_fint24to32letcher(payload[-4:])
 
     def _convert(self, bin_data):
         data = Packet.int24to32(bin_data)

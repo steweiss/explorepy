@@ -32,3 +32,4 @@ def bin2csv(bin_file):
                         return 0
         else:
             c = input("A file with this name already exist, are you sure you want to proceed? [Enter y/n]")
+

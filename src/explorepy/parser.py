@@ -60,7 +60,7 @@ class Parser:
         self.dt_uint16 = np.dtype(np.uint16).newbyteorder('<')
         self.time_offset = None
 
-    def parse_packet(self, mode="print", csv_files=None, outlets=None, filter=None):
+    def parse_packet(self, mode=None, csv_files=None, outlets=None, filter=None):
         r"""Reads and parses a package from a file or socket
 
         Args:

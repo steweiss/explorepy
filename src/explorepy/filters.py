@@ -7,12 +7,12 @@ from scipy import zeros, signal, random
 class Filter:
     def __init__(self):
         self.cutoffA = 0.5
-        self.cutoffB = 40
+        self.cutoffB = 20
         self.sample_frequency = 250.0
         self.order = 5
         self.cutOffLow = 80
-        self.b = signal.firwin(150, [self.cutoffA, self.cutoffB])
-        self.z = signal.lfilter_zi(b, 1)
+        self.b = signal.firwin(5, [self.cutoffA/(0.5*self.sample_frequency), self.cutoffB/(0.5*self.sample_frequency)])
+        self.z = signal.lfilter_zi(self.b, 1)
 
 
     def set_bandpass(self, a, b, fs, order):

@@ -1,6 +1,7 @@
 import numpy
 import scipy
 from scipy.signal import butter, lfilter
+from scipy import zeros, signal, random
 
 
 class Filter:
@@ -10,6 +11,9 @@ class Filter:
         self.sample_frequency = 250.0
         self.order = 5
         self.cutOffLow = 80
+        self.b = signal.firwin(150, [self.cutoffA, self.cutoffB])
+        self.z = signal.lfilter_zi(b, 1)
+
 
     def set_bandpass(self, a, b, fs, order):
         self.cutoffA = a
@@ -25,9 +29,10 @@ class Filter:
         return b, a
 
     def apply_band(self, data):
-        b, a = self.butter_bandpass()
-        filt_data = lfilter(b, a, data)
-        return filt_data
+        data_filt = data
+        for i, x in enumerate(data):
+            data_filt, self.z = signal.lfilter(self.b, 1, [x], zi=self.z)
+        return data_filt
 
     def set_lowpass(self, a, fs, order):
         self.cutOffLow = a

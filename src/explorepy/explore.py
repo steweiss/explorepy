@@ -8,6 +8,7 @@ import os
 import time
 from pylsl import StreamInfo, StreamOutlet
 from explorepy.packet import *
+import explorepy.filters
 
 
 class Explore:
@@ -85,16 +86,17 @@ class Explore:
 
         is_acquiring = True
         lastVal = 10000
-
+        filter = explorepy.filters.Filter
         while is_acquiring:
             try:
                 packetData = self.parser.parse_packet()
 
                 if isinstance(packetData, EEG):
 
+                    packetData.data[0, :] = filter.apply_band(packetData.data[0, :])
                     print(packetData.data)
                     for i in range(len(packetData.data[0])):
-                        compValue = packetData.data[2, i]
+                        compValue = packetData.data[0, i]
                         if compValue > lastVal + 0.0003:
                             print(compValue)
                             print("Blink detected!")

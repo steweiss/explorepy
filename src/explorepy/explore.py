@@ -7,6 +7,7 @@ import csv
 import os
 import time
 from pylsl import StreamInfo, StreamOutlet
+from explorepy.packet import *
 
 
 class Explore:
@@ -60,7 +61,45 @@ class Explore:
         is_acquiring = True
         while is_acquiring:
             try:
-                self.parser.parse_packet(mode="print")
+                packetData = self.parser.parse_packet(mode="print")
+            except ValueError:
+                # If value error happens, scan again for devices and try to reconnect (see reconnect function)
+                print("Disconnected, scanning for last connected device")
+                socket = self.device[device_id].bt_connect()
+                self.parser.socket = socket
+            except bluetooth.BluetoothError as error:
+                print("Bluetooth Error: attempting reconnect. Error: ", error)
+                self.parser.socket = self.device[device_id].bt_connect()
+
+    def get_blink(self, device_id=0):
+        r"""Start getting data from the device
+
+        Args:
+            device_id (int): device id (id=None for disconnecting all devices)
+        """
+
+        self.socket = self.device[device_id].bt_connect()
+
+        if self.parser is None:
+            self.parser = Parser(self.socket)
+
+        is_acquiring = True
+        lastVal = 10000
+
+        while is_acquiring:
+            try:
+                packetData = self.parser.parse_packet()
+
+                if isinstance(packetData, EEG):
+
+                    print(packetData.data)
+                    for i in range(len(packetData.data[0])):
+                        compValue = packetData.data[2, i]
+                        if compValue > lastVal + 0.0003:
+                            print(compValue)
+                            print("Blink detected!")
+                        lastVal = compValue
+
             except ValueError:
                 # If value error happens, scan again for devices and try to reconnect (see reconnect function)
                 print("Disconnected, scanning for last connected device")

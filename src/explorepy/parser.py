@@ -83,6 +83,12 @@ class Parser:
             timestamp = (timestamp - self.time_offset) * .1  # Timestamp unit is .1 ms
         payload_data = self.read(payload - 4)
         packet = generate_packet(pid, timestamp, payload_data)
+
+        if filter is not None:
+            if isinstance(packet, EEG):
+                for i in range(4):
+                    packet.data[i, :] = filter[i].apply_band(data=packet.data[i, :])
+
         if mode == "print":
             print(packet)
         elif mode == "record":
@@ -96,9 +102,6 @@ class Parser:
                 packet.push_to_lsl(outlets[0])
 
             elif isinstance(packet, EEG):
-                if filter is not None:
-                    packet.apply_filt(filt=filter)
-
                 packet.push_to_lsl(outlets[1])
 
         return packet

@@ -11,8 +11,11 @@ class Filter:
         self.sample_frequency = 250.0
         self.order = 5
         self.cutOffLow = 80
-        self.b = signal.firwin(5, [self.cutoffA/(0.5*self.sample_frequency), self.cutoffB/(0.5*self.sample_frequency)])
+        self.b = signal.firwin(11, [self.cutoffA/(0.5*self.sample_frequency), self.cutoffB/(0.5*self.sample_frequency)])
         self.z = signal.lfilter_zi(self.b, 1)
+
+        self.b_high = signal.firwin(3, 0.000001, pass_zero=False)
+        self.z_high = signal.lfilter_zi(self.b_high, 1)
 
 
     def set_bandpass(self, a, b, fs, order):
@@ -32,6 +35,11 @@ class Filter:
         data_filt = data
         for i, x in enumerate(data):
             data_filt, self.z = signal.lfilter(self.b, 1, [x], zi=self.z)
+        return data_filt
+
+    def apply_high(self, data):
+        for i, x in enumerate(data):
+            data_filt, self.z_high = signal.lfilter(self.b_high, 1, [x], zi=self.z_high)
         return data_filt
 
     def set_lowpass(self, a, fs, order):

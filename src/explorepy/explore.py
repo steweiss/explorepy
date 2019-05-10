@@ -74,6 +74,14 @@ class Explore:
 
     def get_blink(self, device_id=0):
         r"""Start getting data from the device
+        Print out if script detects looking left/right or blinking
+
+        Blinking is detected if recent value exceeds previous value + threshhold
+
+        Looking left: Looking left causes a value increase in electrode 1 and a decrease in electrode 4
+        Check if this case happens to detect looking left
+
+        Looking Right: See looking left, but electrode behaviour is now swapped (4 decreases, 1 increases)
 
         Args:
             device_id (int): device id (id=None for disconnecting all devices)
@@ -85,21 +93,66 @@ class Explore:
             self.parser = Parser(self.socket)
 
         is_acquiring = True
-        lastVal = 10000
-        filter = explorepy.filters.Filter()
+
+        """Initialize compare values"""
+        lastVal = 1.0
+        lastVal_eyeR_1 = 1.0
+        lastVal_eyeR_2 = 1.0
+
+        lastVal_eyeL_1 = -1.0
+        lastVal_eyeL_2 = 1.0
+
+        eyeState_L_1 = 1.0
+        eyeState_R_1 =1.0
+
+        filter = []
+
+        direction = None
+
+        for i in range(4):
+            filter.append(explorepy.filters.Filter())
+
         while is_acquiring:
             try:
-                packetData = self.parser.parse_packet()
-
+                """Apply filter for better detection"""
+                packetData = self.parser.parse_packet(filter=filter)
                 if isinstance(packetData, EEG):
-
-                    packetData.data[0, :] = filter.apply_band(data=packetData.data[0, :])
                     for i in range(len(packetData.data[0])):
-                        compValue = packetData.data[0, i]
-                        if compValue > lastVal + 0.0003:
-                            print(compValue)
+                        compValue = packetData.data[1, i]
+                        compValue_eyeR_1 = packetData.data[1, i]
+                        compValue_eyeL_1 = packetData.data[3, i]
+
+                        if compValue > lastVal + 0.00035:
                             print("Blink detected!")
+
+                        """Check for looking Right or left"""
+                        if lastVal_eyeR_1 + 0.00015 < compValue_eyeR_1 < lastVal_eyeR_1 + 0.00035:
+                            eyeState_R_1 = compValue_eyeR_1
+                            if compValue_eyeL_1 < lastVal_eyeL_1 - 0.00012:
+                                eyeState_L_1 = compValue_eyeL_1
+                                print("looking right!")
+                                direction = "right"
+
+                        elif lastVal_eyeL_1 + 0.00015 < compValue_eyeL_1 < lastVal_eyeL_1 + 0.00035:
+                            eyeState_L_1 = compValue_eyeL_1
+                            if compValue_eyeR_1 < lastVal_eyeR_1 - 0.0001:
+                                eyeState_R_1 = compValue_eyeR_1
+                                print("looking left")
+                                direction = "left"
+
+                        if eyeState_R_1-0.00005 < compValue_eyeR_1 < eyeState_R_1+0.00005 and eyeState_L_1-0.00005 <\
+                            compValue_eyeL_1 < eyeState_L_1+0.00005:
+                            if direction is not None:
+                                print("still looking in direction", direction)
+
+                        elif eyeState_R_1 !=1:
+                            print("stopped looking")
+                            eyeState_L_1 = 1
+                            eyeState_R_1 = 1
+
                         lastVal = compValue
+                        lastVal_eyeR_1 = compValue_eyeR_1
+                        lastVal_eyeL_1 = compValue_eyeL_1
 
             except ValueError:
                 # If value error happens, scan again for devices and try to reconnect (see reconnect function)
@@ -130,6 +183,10 @@ class Explore:
         if self.parser is None:
             self.parser = Parser(self.socket)
 
+        filter = []
+        for i in range(4):
+            filter.append(explorepy.filters.Filter())
+
         with open(exg_out_file, "w") as f_eeg, open(orn_out_file, "w") as f_orn:
             f_orn.write("TimeStamp, ax, ay, az, gx, gy, gz, mx, my, mz \n")
             f_orn.write(
@@ -143,8 +200,7 @@ class Explore:
 
             while is_acquiring:
                 try:
-                    self.parser.parse_packet()
-                    packet = self.parser.parse_packet(mode="record", csv_files=(csv_eeg, csv_orn))
+                    packet = self.parser.parse_packet(mode="record", csv_files=(csv_eeg, csv_orn), filter=filter)
                     if time_offset is not None:
                         packet.timestamp = packet.timestamp-time_offset
                     else:

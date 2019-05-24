@@ -13,12 +13,76 @@ from bokeh.server.server import Server
 from bokeh.palettes import Colorblind
 from bokeh.models.widgets import Select, DataTable, TableColumn, RadioButtonGroup
 from bokeh.models import SingleIntervalTicker
-from explorepy.dashboard.orient3d import orient3d
+#from explorepy.dashboard.orient3d import orient3d
+from bokeh.core.properties import Any, Dict, Instance, String
+from bokeh.models import ColumnDataSource, LayoutDOM
 from bokeh.io import curdoc
 from tornado import gen
 from bokeh.driving import count
 from bokeh.io import curdoc
 from bokeh.io import show
+
+
+
+# This defines some default options for the Graph3d feature of vis.js
+# See: http://visjs.org/graph3d_examples.html for more details. Note
+# that we are fixing the size of this component, in ``options``, but
+# with additional work it could be made more responsive.
+DEFAULTS = {
+    'width':          '600px',
+    'height':         '600px',
+    'style':          'surface',
+    'showPerspective': True,
+    'showGrid':        True,
+    'keepAspectRatio': True,
+    'verticalRatio':   1.0,
+    'legendLabel':     'stuff',
+    'cameraPosition':  {
+        'horizontal': -0.35,
+        'vertical':    0.22,
+        'distance':    1.8,
+    }
+}
+
+
+# This custom extension model will have a DOM view that should layout-able in
+# Bokeh layouts, so use ``LayoutDOM`` as the base class. If you wanted to create
+# a custom tool, you could inherit from ``Tool``, or from ``Glyph`` if you
+# wanted to create a custom glyph, etc.
+class orient3d(LayoutDOM):
+
+    # The special class attribute ``__implementation__`` should contain a string
+    # of JavaScript (or TypeScript) code that implements the JavaScript side
+    # of the custom extension model.
+    __implementation__ = "orient3d.ts"
+
+    # Below are all the "properties" for this model. Bokeh properties are
+    # class attributes that define the fields (and their types) that can be
+    # communicated automatically between Python and the browser. Properties
+    # also support type validation. More information about properties in
+    # can be found here:
+    #
+    #    https://bokeh.pydata.org/en/latest/docs/reference/core.html#bokeh-core-properties
+
+    # This is a Bokeh ColumnDataSource that can be updated in the Bokeh
+    # server by Python code
+    data_source = Instance(ColumnDataSource)
+
+    # The vis.js library that we are wrapping expects data for x, y, and z.
+    # The data will actually be stored in the ColumnDataSource, but these
+    # properties let us specify the *name* of the column that should be
+    # used for each field.
+    x = String
+
+    y = String
+
+    z = String
+
+    # Any of the available vis.js options for Graph3d can be set by changing
+    # the contents of this dictionary.
+    options = Dict(String, Any, default=DEFAULTS)
+
+
 
 EEG_SRATE = 250  # Hz
 ORN_SRATE = 20  # Hz
@@ -36,12 +100,16 @@ TIME_RANGE_MENU = {"10 s": 10., "5 s": 5., "20 s": 20.}
 
 LINE_COLORS = ['green', '#42C4F7', 'red']
 FFT_COLORS = Colorblind[8]
-
+ORN3D_LIST = ['x', 'y', 'z']
+"""
 x = np.arange(0, 300, 20)
 y = np.arange(0, 300, 20)
 xx, yy = np.meshgrid(x, y)
 xx = xx.ravel()
 yy = yy.ravel()
+"""
+xx=0
+yy=0
 
 
 def compute(t):
@@ -79,7 +147,9 @@ class Dashboard:
         self.orn_source = ColumnDataSource(data=init_data)
 
         # init ORN3D data source
-        self.orn3d_source = ColumnDataSource(data=compute(0))
+        init_data = dict(zip(ORN3D_LIST, np.zeros((3, 1))))
+        init_data['t'] = [0.]
+        self.orn3d_source = ColumnDataSource(data=init_data)
 
         # Init table sources
         self.heart_rate_source = ColumnDataSource(data={'heart_rate': ['NA']})
@@ -126,7 +196,6 @@ class Dashboard:
         self.doc.add_root(row([m_widgetbox, self.tabs]))
         self.doc.add_periodic_callback(self._update_fft, 2000)
         self.doc.add_periodic_callback(self._update_heart_rate, 2000)
-        #self.doc.add_periodic_callback(self.update_orn3d, 2000)
 
 
     @gen.coroutine
@@ -158,8 +227,11 @@ class Dashboard:
         self.orn_source.stream(new_data, rollover=2 * WIN_LENGTH * ORN_SRATE)
 
     @gen.coroutine
-    def update_orn3d(self):
-        self.orn3d_source.data = compute(10)
+    def update_orn3d(self, timestamp, orn3d_data):
+        # self.orn3d_source.data = compute(10)
+        new_data = dict(zip(ORN3D_LIST, np.array(orn3d_data)[:, np.newaxis]))
+        new_data['t'] = [timestamp]
+        self.orn3d_source.stream(new_data, rollover=2 * WIN_LENGTH * ORN_SRATE)
 
     @gen.coroutine
     def update_info(self, new):
@@ -291,8 +363,11 @@ class Dashboard:
         self.fft_plot = figure(y_axis_label='Amplitude (uV)', x_axis_label='Frequency (Hz)', title="FFT",
                                x_range=(0, 70), plot_height=600, plot_width=1270, y_axis_type="log")
 
-        #self.orn3d_plot = orient3d(x="x", y="y", z="z", data_source=self.orn3d_source)
-        self.orn3d_plot = None
+        # self.orn3d_plot = orient3d(x="x", y="y", z="z", data_source=self.orn3d_source)
+        self.orn3d_plot = figure(y_axis_label='Magnetometer [mgauss/LSB]', x_axis_label='Time (s)',
+                               plot_height=600, plot_width=1270,
+                               tools=[ResetTool()], active_scroll=None, active_drag=None,
+                               active_inspect=None, active_tap=None)
 
         # Set yaxis properties
         self.exg_plot.yaxis.ticker = SingleIntervalTicker(interval=1, num_minor_ticks=10)
@@ -309,6 +384,8 @@ class Dashboard:
             self.gyro_plot.line(x='t', y=ORN_LIST[i + 3], source=self.orn_source, legend=ORN_LIST[i + 3] + " ",
                                 line_width=1.5, line_color=LINE_COLORS[i], alpha=.9)
             self.mag_plot.line(x='t', y=ORN_LIST[i + 6], source=self.orn_source, legend=ORN_LIST[i + 6] + " ",
+                               line_width=1.5, line_color=LINE_COLORS[i], alpha=.9)
+            self.orn3d_plot.line(x='t', y=ORN3D_LIST[i], source=self.orn3d_source, legend=ORN3D_LIST[i] + " ",
                                line_width=1.5, line_color=LINE_COLORS[i], alpha=.9)
 
         # Set x_range
@@ -414,8 +491,8 @@ if __name__ == '__main__':
 
             #m_dashboard.doc.add_next_tick_callback(
             #    partial(m_dashboard.update_orn3d, timestamp=T, orn3d_data=np.random.rand(9)))
-            #m_dashboard.doc.add_next_tick_callback(partial(m_dashboard.update_orn3d, timestamp=T))
-            time.sleep(10)
+            m_dashboard.doc.add_next_tick_callback(partial(m_dashboard.update_orn3d, timestamp=T, orn3d_data=np.random.rand(3)))
+            time.sleep(0.2)
 
 
     thread = Thread(target=my_loop)

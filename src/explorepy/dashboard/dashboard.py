@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import division
 import numpy as np
 import time
 from functools import partial
@@ -12,8 +13,12 @@ from bokeh.server.server import Server
 from bokeh.palettes import Colorblind
 from bokeh.models.widgets import Select, DataTable, TableColumn, RadioButtonGroup
 from bokeh.models import SingleIntervalTicker
-
+from explorepy.dashboard.orient3d import orient3d
+from bokeh.io import curdoc
 from tornado import gen
+from bokeh.driving import count
+from bokeh.io import curdoc
+from bokeh.io import show
 
 EEG_SRATE = 250  # Hz
 ORN_SRATE = 20  # Hz
@@ -31,6 +36,17 @@ TIME_RANGE_MENU = {"10 s": 10., "5 s": 5., "20 s": 20.}
 
 LINE_COLORS = ['green', '#42C4F7', 'red']
 FFT_COLORS = Colorblind[8]
+
+x = np.arange(0, 300, 20)
+y = np.arange(0, 300, 20)
+xx, yy = np.meshgrid(x, y)
+xx = xx.ravel()
+yy = yy.ravel()
+
+
+def compute(t):
+    value = np.sin(xx / 50 + t / 10) * np.cos(yy / 50 + t / 10) * 50 + 50
+    return dict(x=xx, y=yy, z=value)
 
 
 class Dashboard:
@@ -61,6 +77,9 @@ class Dashboard:
         init_data = dict(zip(ORN_LIST, np.zeros((9, 1))))
         init_data['t'] = [0.]
         self.orn_source = ColumnDataSource(data=init_data)
+
+        # init ORN3D data source
+        self.orn3d_source = ColumnDataSource(data=compute(0))
 
         # Init table sources
         self.heart_rate_source = ColumnDataSource(data={'heart_rate': ['NA']})
@@ -99,11 +118,15 @@ class Dashboard:
         exg_tab = Panel(child=self.exg_plot, title="ExG Signal")
         orn_tab = Panel(child=column([self.acc_plot, self.gyro_plot, self.mag_plot], sizing_mode='fixed'),
                         title="Orientation")
+        orn3d_tab = Panel(child=self.orn3d_plot, title="Orientation visualization")
+        # orn3d_tab = Panel(child=column([self.acc_plot, self.gyro_plot, self.mag_plot], sizing_mode='fixed'),
+        #                   title="Orientation")
         fft_tab = Panel(child=self.fft_plot, title="Spectral analysis")
-        self.tabs = Tabs(tabs=[exg_tab, orn_tab, fft_tab], width=1200)
+        self.tabs = Tabs(tabs=[exg_tab, orn_tab, fft_tab, orn3d_tab], width=1200)
         self.doc.add_root(row([m_widgetbox, self.tabs]))
         self.doc.add_periodic_callback(self._update_fft, 2000)
         self.doc.add_periodic_callback(self._update_heart_rate, 2000)
+        #self.doc.add_periodic_callback(self.update_orn3d, 2000)
 
 
     @gen.coroutine
@@ -133,6 +156,10 @@ class Dashboard:
         new_data = dict(zip(ORN_LIST, np.array(orn_data)[:, np.newaxis]))
         new_data['t'] = [timestamp]
         self.orn_source.stream(new_data, rollover=2 * WIN_LENGTH * ORN_SRATE)
+
+    @gen.coroutine
+    def update_orn3d(self):
+        self.orn3d_source.data = compute(10)
 
     @gen.coroutine
     def update_info(self, new):
@@ -264,6 +291,9 @@ class Dashboard:
         self.fft_plot = figure(y_axis_label='Amplitude (uV)', x_axis_label='Frequency (Hz)', title="FFT",
                                x_range=(0, 70), plot_height=600, plot_width=1270, y_axis_type="log")
 
+        #self.orn3d_plot = orient3d(x="x", y="y", z="z", data_source=self.orn3d_source)
+        self.orn3d_plot = None
+
         # Set yaxis properties
         self.exg_plot.yaxis.ticker = SingleIntervalTicker(interval=1, num_minor_ticks=10)
 
@@ -382,7 +412,10 @@ if __name__ == '__main__':
             m_dashboard.doc.add_next_tick_callback(
                 partial(m_dashboard.update_orn, timestamp=T, orn_data=np.random.rand(9)))
 
-            time.sleep(0.2)
+            #m_dashboard.doc.add_next_tick_callback(
+            #    partial(m_dashboard.update_orn3d, timestamp=T, orn3d_data=np.random.rand(9)))
+            #m_dashboard.doc.add_next_tick_callback(partial(m_dashboard.update_orn3d, timestamp=T))
+            time.sleep(10)
 
 
     thread = Thread(target=my_loop)

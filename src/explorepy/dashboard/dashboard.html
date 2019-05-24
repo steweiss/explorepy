@@ -1,0 +1,239 @@
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+  
+  <head>
+    
+      <meta charset="utf-8">
+      <title>Bokeh Plot</title>
+      
+      
+        
+          
+        <link rel="stylesheet" href="https://cdn.pydata.org/bokeh/release/bokeh-1.1.0.min.css" type="text/css" />
+        
+        
+          
+        <script type="text/javascript" src="https://cdn.pydata.org/bokeh/release/bokeh-1.1.0.min.js"></script>
+        <script type="text/javascript">
+            Bokeh.set_log_level("info");
+        </script>
+
+        <script type="text/javascript">
+          (function(root, factory) {
+          //  if(typeof exports === 'object' && typeof module === 'object')
+          //    factory(require("Bokeh"));
+          //  else if(typeof define === 'function' && define.amd)
+          //    define(["Bokeh"], factory);
+          //  else if(typeof exports === 'object')
+          //    factory(require("Bokeh"));
+          //  else
+              factory(root["Bokeh"]);
+          })(this, function(Bokeh) {
+            var define;
+            return (function outer(modules, entry) {
+            if (Bokeh != null) {
+              return Bokeh.register_plugin(modules, {}, entry);
+            } else {
+              throw new Error("Cannot find Bokeh. You have to load it prior to loading plugins.");
+            }
+          })
+          ({
+            "custom/main": function(require, module, exports) {
+              var models = {
+                "orient3d": require("custom/explorepy.dashboard.orient3d.orient3d").orient3d
+              };
+              require("base").register_models(models);
+              module.exports = models;
+            },
+            "custom/explorepy.dashboard.orient3d.orient3d": function(require, module, exports) {
+          "use strict";
+          // This file contains the JavaScript (TypeScript) implementation
+          // for a Bokeh custom extension. The "surface3d.py" contains the
+          // python counterpart.
+          //
+          // This custom model wraps one part of the third-party vis.js library:
+          //
+          //     http://visjs.org/index.html
+          //
+          // Making it easy to hook up python data analytics tools (NumPy, SciPy,
+          // Pandas, etc.) to web presentations using the Bokeh server.
+          var __extends = (this && this.__extends) || (function () {
+              var extendStatics = function (d, b) {
+                  extendStatics = Object.setPrototypeOf ||
+                      ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+                      function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+                  return extendStatics(d, b);
+              };
+              return function (d, b) {
+                  extendStatics(d, b);
+                  function __() { this.constructor = d; }
+                  d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+              };
+          })();
+          Object.defineProperty(exports, "__esModule", { value: true });
+          var html_box_1 = require("models/layouts/html_box");
+          var p = require("core/properties");
+          // This defines some default options for the Graph3d feature of vis.js
+          // See: http://visjs.org/graph3d_examples.html for more details. This
+          // JS object should match the Python default value.
+          var OPTIONS = {
+              width: '600px',
+              height: '600px',
+              style: 'surface',
+              showPerspective: true,
+              showGrid: true,
+              keepAspectRatio: true,
+              verticalRatio: 1.0,
+              legendLabel: 'stuff',
+              cameraPosition: {
+                  horizontal: -0.35,
+                  vertical: 0.22,
+                  distance: 1.8,
+              },
+          };
+          // To create custom model extensions that will render on to the HTML canvas or
+          // into the DOM, we must create a View subclass for the model. In this case we
+          // will subclass from the existing BokehJS ``HTMLBoxView``, corresponding to our.
+          var orient3dView = /** @class */ (function (_super) {
+              __extends(orient3dView, _super);
+              function orient3dView() {
+                  return _super !== null && _super.apply(this, arguments) || this;
+              }
+              orient3dView.prototype.render = function () {
+                  _super.prototype.render.call(this);
+                  // Create a new Graph3s using the vis.js API. This assumes the vis.js has
+                  // already been loaded (e.g. in a custom app template). In the future Bokeh
+                  // models will be able to specify and load external scripts automatically.
+                  //
+                  // Views create <div> elements by default, accessible as @el. Many
+                  // Bokeh views ignore this default <div>, and instead do things like draw
+                  // to the HTML canvas. In this case though, we use the <div> to attach a
+                  // Graph3d to the DOM.
+                  this._graph = new vis.Graph3d(this.el, this.get_data(), this.model.options);
+              };
+              orient3dView.prototype.connect_signals = function () {
+                  var _this = this;
+                  _super.prototype.connect_signals.call(this);
+                  // Set listener so that when the Bokeh data source has a change
+                  // event, we can process the new data
+                  this.connect(this.model.data_source.change, function () { return _this._graph.setData(_this.get_data()); });
+              };
+              // This is the callback executed when the Bokeh data has an change (e.g. when
+              // the server updates the data). It's basic function is simply to adapt the
+              // Bokeh data source to the vis.js DataSet format
+              orient3dView.prototype.get_data = function () {
+                  var data = new vis.DataSet();
+                  var source = this.model.data_source;
+                  for (var i = 0; i < source.get_length(); i++) {
+                      data.add({
+                          x: source.data[this.model.x][i],
+                          y: source.data[this.model.y][i],
+                          z: source.data[this.model.z][i],
+                      });
+                  }
+                  return data;
+              };
+              return orient3dView;
+          }(html_box_1.HTMLBoxView));
+          exports.orient3dView = orient3dView;
+          var orient3d = /** @class */ (function (_super) {
+              __extends(orient3d, _super);
+              function orient3d(attrs) {
+                  return _super.call(this, attrs) || this;
+              }
+              orient3d.initClass = function () {
+                  // The ``type`` class attribute should generally match exactly the name
+                  // of the corresponding Python class.
+                  this.prototype.type = "orient3d";
+                  // This is usually boilerplate. In some cases there may not be a view.
+                  this.prototype.default_view = orient3dView;
+                  // The @define block adds corresponding "properties" to the JS model. These
+                  // should basically line up 1-1 with the Python model class. Most property
+                  // types have counterparts, e.g. ``bokeh.core.properties.String`` will be
+                  // ``p.String`` in the JS implementatin. Where the JS type system is not yet
+                  // as rich, you can use ``p.Any`` as a "wildcard" property type.
+                  this.define({
+                      x: [p.String],
+                      y: [p.String],
+                      z: [p.String],
+                      data_source: [p.Instance],
+                      options: [p.Any, OPTIONS],
+                  });
+              };
+              return orient3d;
+          }(html_box_1.HTMLBox));
+          exports.orient3d = orient3d;
+          orient3d.initClass();
+          
+          }
+          }, "custom/main");
+          ;
+          });
+          
+        </script>
+        
+      
+      
+    
+  </head>
+  
+  
+  <body>
+    
+      
+        
+          
+          
+            
+              <div class="bk-root" id="dfadabef-ae39-40d0-8e00-a6708b0d69db" data-root-id="1135"></div>
+            
+          
+        
+      
+      
+        <script type="application/json" id="1890">
+          {"4bb89d7b-cc42-4e34-9e64-58382306c4ab":{"roots":{"references":[{"attributes":{"data_source":{"id":"1004","type":"ColumnDataSource"},"x":"x","y":"y","z":"z"},"id":"1135","type":"orient3d"},{"attributes":{},"id":"1478","type":"Selection"},{"attributes":{},"id":"1479","type":"UnionRenderers"},{"attributes":{"callback":null,"data":{"x":[0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280,0,20,40,60,80,100,120,140,160,180,200,220,240,260,280],"y":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,60,60,60,60,60,60,60,60,60,60,60,60,60,60,60,80,80,80,80,80,80,80,80,80,80,80,80,80,80,80,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,120,120,120,120,120,120,120,120,120,120,120,120,120,120,120,140,140,140,140,140,140,140,140,140,140,140,140,140,140,140,160,160,160,160,160,160,160,160,160,160,160,160,160,160,160,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,200,200,200,200,200,200,200,200,200,200,200,200,200,200,200,220,220,220,220,220,220,220,220,220,220,220,220,220,220,220,240,240,240,240,240,240,240,240,240,240,240,240,240,240,240,260,260,260,260,260,260,260,260,260,260,260,260,260,260,260,280,280,280,280,280,280,280,280,280,280,280,280,280,280,280],"z":{"__ndarray__":"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","dtype":"float64","shape":[225]}},"selected":{"id":"1478","type":"Selection"},"selection_policy":{"id":"1479","type":"UnionRenderers"}},"id":"1004","type":"ColumnDataSource"}],"root_ids":["1135"]},"title":"Bokeh Application","version":"1.1.0"}}
+        </script>
+        <script type="text/javascript">
+          (function() {
+            var fn = function() {
+              Bokeh.safely(function() {
+                (function(root) {
+                  function embed_document(root) {
+                    
+                  var docs_json = document.getElementById('1890').textContent;
+                  var render_items = [{"docid":"4bb89d7b-cc42-4e34-9e64-58382306c4ab","roots":{"1135":"dfadabef-ae39-40d0-8e00-a6708b0d69db"}}];
+                  root.Bokeh.embed.embed_items(docs_json, render_items);
+                
+                  }
+                  if (root.Bokeh !== undefined) {
+                    embed_document(root);
+                  } else {
+                    var attempts = 0;
+                    var timer = setInterval(function(root) {
+                      if (root.Bokeh !== undefined) {
+                        embed_document(root);
+                        clearInterval(timer);
+                      }
+                      attempts++;
+                      if (attempts > 100) {
+                        console.log("Bokeh: ERROR: Unable to run BokehJS code because BokehJS library is missing");
+                        clearInterval(timer);
+                      }
+                    }, 10, root)
+                  }
+                })(window);
+              });
+            };
+            if (document.readyState != "loading") fn();
+            else document.addEventListener("DOMContentLoaded", fn);
+          })();
+        </script>
+    
+  </body>
+  
+</html>

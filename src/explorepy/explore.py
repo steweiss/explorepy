@@ -119,36 +119,19 @@ class Explore:
                 if isinstance(packetData, EEG):
                     for i in range(len(packetData.data[0])):
                         compValue = packetData.data[1, i]
-                        compValue_eyeR_1 = packetData.data[1, i]
+                        compValue_eyeR_1 = packetData.data[0, i]
                         compValue_eyeL_1 = packetData.data[3, i]
 
-                        if compValue > lastVal + 0.00035:
-                            print("Blink detected!")
+                        if lastVal + 0.00035 < compValue < lastVal + 0.0007:
 
                         """Check for looking Right or left"""
-                        if lastVal_eyeR_1 + 0.00015 < compValue_eyeR_1 < lastVal_eyeR_1 + 0.00035:
-                            eyeState_R_1 = compValue_eyeR_1
-                            if compValue_eyeL_1 < lastVal_eyeL_1 - 0.00012:
-                                eyeState_L_1 = compValue_eyeL_1
-                                print("looking right!")
-                                direction = "right"
+                        if lastVal_eyeL_1 - 0.00005 > compValue_eyeL_1  and compValue_eyeR_1 >\
+                            lastVal_eyeR_1 + 0.00005:
+                            print("looking right")
 
-                        elif lastVal_eyeL_1 + 0.00015 < compValue_eyeL_1 < lastVal_eyeL_1 + 0.00035:
-                            eyeState_L_1 = compValue_eyeL_1
-                            if compValue_eyeR_1 < lastVal_eyeR_1 - 0.0001:
-                                eyeState_R_1 = compValue_eyeR_1
-                                print("looking left")
-                                direction = "left"
-
-                        if eyeState_R_1-0.00005 < compValue_eyeR_1 < eyeState_R_1+0.00005 and eyeState_L_1-0.00005 <\
-                            compValue_eyeL_1 < eyeState_L_1+0.00005:
-                            if direction is not None:
-                                print("still looking in direction", direction)
-
-                        elif eyeState_R_1 !=1:
-                            print("stopped looking")
-                            eyeState_L_1 = 1
-                            eyeState_R_1 = 1
+                        elif lastVal_eyeR_1 - 0.00005 > compValue_eyeR_1  and compValue_eyeL_1 >\
+                            lastVal_eyeL_1 + 0.00005:
+                            print("looking Left")
 
                         lastVal = compValue
                         lastVal_eyeR_1 = compValue_eyeR_1

@@ -6,12 +6,12 @@ from scipy import zeros, signal, random
 
 class Filter:
     def __init__(self):
-        self.cutoffA = 0.5
+        self.cutoffA = 0.1
         self.cutoffB = 20
         self.sample_frequency = 250.0
         self.order = 5
         self.cutOffLow = 80
-        self.b = signal.firwin(11, [self.cutoffA/(0.5*self.sample_frequency), self.cutoffB/(0.5*self.sample_frequency)])
+        self.b = signal.firwin(400, [self.cutoffA/(0.5*self.sample_frequency), self.cutoffB/(0.5*self.sample_frequency)], pass_zero=False)
         self.z = signal.lfilter_zi(self.b, 1)
 
         self.b_high = signal.firwin(3, 0.000001, pass_zero=False)

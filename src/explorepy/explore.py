@@ -24,6 +24,15 @@ class Explore:
         for i in range(n_device):
             self.device.append(BtClient())
 
+        # Thresholds for EOG
+
+        self.th_left_1 = 0.00006  # Threshold detecting left movement for channel 1
+        self.th_left_2 = 0.00006  # Threshold detecting left movement for channel 2
+        self.blink_th_upper = 0.0007  # Threshold detecting blinking (maximum peak)
+        self.blink_th_lower = 0.00015   # Threshold detecting blinking (minimum peak)
+        self.th_right_1 = 0.00006  # Threshold detecting right movement for channel 1
+        self.th_right_2 = 0.00006  # Threshold detecting right movement for channel 2
+
     def connect(self, device_name=None, device_addr=None, device_id=0):
         r"""
         Connects to the nearby device. If there are more than one device, the user is asked to choose one of them.
@@ -72,21 +81,39 @@ class Explore:
                 print("Bluetooth Error: attempting reconnect. Error: ", error)
                 self.parser.socket = self.device[device_id].bt_connect()
 
+    def set_blink(self, a, b, c, d, e, f):
+        r"""Set thresholds for EOG (detection of eye movement)
+
+        Args:
+
+        :return:
+        """
+        self.th_left_1 = a
+        self.th_left_2 = b
+        self.th_right_1 = c
+        self.th_right_2 = d
+        self.blink_th_lower = e
+        self.blink_th_upper = f
+
     def get_blink(self, device_id=0):
         r"""Start getting data from the device
         Print out if script detects looking left/right or blinking
 
-        Blinking is detected if recent value exceeds previous value + threshhold
+        Blinking is detected if recent value exceeds previous value + threshold
 
         Looking left: Looking left causes a value increase in electrode 1 and a decrease in electrode 4
-        Check if this case happens to detect looking left
+        Check if this case happens to detect looking left (in certain range)
 
         Looking Right: See looking left, but electrode behaviour is now swapped (4 decreases, 1 increases)
 
         Args:
             device_id (int): device id (id=None for disconnecting all devices)
-        """
 
+        Yields:
+            blink5 (int): is either 0 or 1 if user blinked 5 times in rapid succession
+            direction (str): either "left" or "right", depending of eye movement direction
+        """
+        
         self.socket = self.device[device_id].bt_connect()
 
         if self.parser is None:
@@ -107,12 +134,13 @@ class Explore:
 
         filter = []
 
-        direction = None
-
         for i in range(4):
             filter.append(explorepy.filters.Filter())
 
+        detect_5blink = 0
         while is_acquiring:
+
+            """Initialize return Values"""
             try:
                 """Apply filter for better detection"""
                 packetData = self.parser.parse_packet(filter=filter)
@@ -122,17 +150,40 @@ class Explore:
                         compValue_eyeR_1 = packetData.data[0, i]
                         compValue_eyeL_1 = packetData.data[3, i]
 
-                        if lastVal + 0.00035 < compValue < lastVal + 0.0007:
+                        if lastVal + 0.00015 < compValue < lastVal + 0.0007: #Previously 0.00035
+                            print("Blink detected!")
+                            if detect_5blink == 0:
+                                detect_5blink_start = time.time()
+                                detect_5blink_range = time.time()
+                                detect_5blink += 1
+                                blink5 = 0.0
+                                yield blink5
+                            elif detect_5blink == 4 and (time.time()-detect_5blink_start) < 2.0:
+                                print("5 times blinking in rapid succession")
+                                detect_5blink = 0
+                                blink5 = 1.0
+                                yield blink5
+                            elif detect_5blink != 0 and (time.time()-detect_5blink_range) < 0.4:
+                                detect_5blink += 1
+                                detect_5blink_range = time.time()
+                                blink5 = 0.0
+                                yield blink5
+                            elif (time.time()-detect_5blink_range) > 0.4:
+                                detect_5blink = 0
+                                blink5 = 0.0
+                                yield blink5
 
                         """Check for looking Right or left"""
-                        if lastVal_eyeL_1 - 0.00005 > compValue_eyeL_1  and compValue_eyeR_1 >\
-                            lastVal_eyeR_1 + 0.00005:
+                        if lastVal_eyeL_1 - 0.00006 > compValue_eyeL_1  and compValue_eyeR_1 >\
+                            lastVal_eyeR_1 + 0.00006:
                             print("looking right")
 
-                        elif lastVal_eyeR_1 - 0.00005 > compValue_eyeR_1  and compValue_eyeL_1 >\
-                            lastVal_eyeL_1 + 0.00005:
+                        elif lastVal_eyeR_1 - 0.00006 > compValue_eyeR_1  and compValue_eyeL_1 >\
+                            lastVal_eyeL_1 + 0.00006:
                             print("looking Left")
 
+                        blink5 = 0.0
+                        yield blink5
                         lastVal = compValue
                         lastVal_eyeR_1 = compValue_eyeR_1
                         lastVal_eyeL_1 = compValue_eyeL_1

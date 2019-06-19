@@ -256,9 +256,18 @@ LINE_COLORS = ['green', '#42C4F7', 'red']
 FFT_COLORS = Colorblind[8]
 ORN3D_LIST = ['x', 'y', 'z']
 
-x = np.arange(0, 300, 20)
-y = np.arange(0, 300, 20)
+x = np.arange(-100, 100, 5)
+y = np.arange(-100, 100, 5)
+
 xx, yy = np.meshgrid(x, y)
+
+r = np.sqrt((xx - 0)**2 + (yy - 0)**2)
+insideC = r < 100
+
+xx = xx[insideC]
+yy = yy[insideC]
+
+
 xx = xx.ravel()
 yy = yy.ravel()
 
@@ -389,7 +398,7 @@ class Dashboard:
         self.orn_source.stream(new_data, rollover=2 * WIN_LENGTH * ORN_SRATE)
 
     def compute(self, t):
-        value = np.sin(xx / 50 + t / 10) * np.cos(yy / 50 + t / 10) * 50 + 50
+        value = (np.cos(xx / 200 ) * np.cos(yy / 200 )) * np.exp((xx**2+yy**2)*(-0.001)) + 50
         return dict(x=xx, y=yy, z=value)
 
 
@@ -664,7 +673,7 @@ if __name__ == '__main__':
 
             m_dashboard.doc.add_next_tick_callback(
                 partial(m_dashboard.update_orn3d, timestamp=T))
-            time.sleep(0.5)
+            time.sleep(0.1)
 
 
     thread = Thread(target=my_loop)

@@ -14,8 +14,10 @@ from bokeh.palettes import Colorblind
 from bokeh.models.widgets import Select, DataTable, TableColumn, RadioButtonGroup
 from bokeh.models import SingleIntervalTicker
 #from explorepy.dashboard.orient3d import orient3d
+#from explorepy.dashboard.surface3d import Surface3d
 from bokeh.core.properties import Any, Dict, Instance, String
 from bokeh.models import ColumnDataSource, LayoutDOM
+from bokeh.util.compiler import TypeScript
 from bokeh.io import curdoc
 from tornado import gen
 from bokeh.driving import count
@@ -29,8 +31,8 @@ from bokeh.io import show
 # that we are fixing the size of this component, in ``options``, but
 # with additional work it could be made more responsive.
 DEFAULTS = {
-    'width':          '600px',
-    'height':         '600px',
+    'width':          '200px',
+    'height':         '200px',
     'style':          'surface',
     'showPerspective': True,
     'showGrid':        True,
@@ -44,17 +46,169 @@ DEFAULTS = {
     }
 }
 
+TS_CODE = """
+// This custom model wraps one part of the third-party vis.js library:
+//
+//     http://visjs.org/index.html
+//
+// Making it easy to hook up python data analytics tools (NumPy, SciPy,
+// Pandas, etc.) to web presentations using the Bokeh server.
+
+import {LayoutDOM, LayoutDOMView} from "models/layouts/layout_dom"
+import {ColumnDataSource} from "models/sources/column_data_source"
+import {LayoutItem} from "core/layout"
+import * as p from "core/properties"
+
+declare namespace vis {
+  class Graph3d {
+    constructor(el: HTMLElement, data: object, OPTIONS: object)
+    setData(data: vis.DataSet): void
+  }
+
+  class DataSet {
+    add(data: unknown): void
+  }
+}
+
+// This defines some default options for the Graph3d feature of vis.js
+// See: http://visjs.org/graph3d_examples.html for more details.
+const OPTIONS = {
+  width: '600px',
+  height: '600px',
+  style: 'surface',
+  showPerspective: true,
+  showGrid: true,
+  keepAspectRatio: true,
+  verticalRatio: 1.0,
+  legendLabel: 'stuff',
+  cameraPosition: {
+    horizontal: -0.35,
+    vertical: 0.22,
+    distance: 1.8,
+  },
+}
+// To create custom model extensions that will render on to the HTML canvas
+// or into the DOM, we must create a View subclass for the model.
+//
+// In this case we will subclass from the existing BokehJS ``LayoutDOMView``
+export class Surface3dView extends LayoutDOMView {
+  model: Surface3d
+
+  private _graph: vis.Graph3d
+
+  initialize(): void {
+    super.initialize()
+
+    const url = "https://cdnjs.cloudflare.com/ajax/libs/vis/4.16.1/vis.min.js"
+    const script = document.createElement("script")
+    script.onload = () => this._init()
+    script.async = false
+    script.src = url
+    document.head.appendChild(script)
+  }
+
+  private _init(): void {
+    // Create a new Graph3s using the vis.js API. This assumes the vis.js has
+    // already been loaded (e.g. in a custom app template). In the future Bokeh
+    // models will be able to specify and load external scripts automatically.
+    //
+    // BokehJS Views create <div> elements by default, accessible as this.el.
+    // Many Bokeh views ignore this default <div>, and instead do things like
+    // draw to the HTML canvas. In this case though, we use the <div> to attach
+    // a Graph3d to the DOM.
+    this._graph = new vis.Graph3d(this.el, this.get_data(), OPTIONS)
+
+    // Set a listener so that when the Bokeh data source has a change
+    // event, we can process the new data
+    this.connect(this.model.data_source.change, () => {
+      this._graph.setData(this.get_data())
+    })
+  }
+
+  // This is the callback executed when the Bokeh data has an change. Its basic
+  // function is to adapt the Bokeh data source to the vis.js DataSet format.
+  get_data(): vis.DataSet {
+    const data = new vis.DataSet()
+    const source = this.model.data_source
+    for (let i = 0; i < source.get_length()!; i++) {
+      data.add({
+        x: source.data[this.model.x][i],
+        y: source.data[this.model.y][i],
+        z: source.data[this.model.z][i],
+      })
+    }
+    return data
+  }
+
+  get child_models(): LayoutDOM[] {
+    return []
+  }
+
+  _update_layout(): void {
+    this.layout = new LayoutItem()
+    this.layout.set_sizing(this.box_sizing())
+  }
+}
+
+// We must also create a corresponding JavaScript BokehJS model subclass to
+// correspond to the python Bokeh model subclass. In this case, since we want
+// an element that can position itself in the DOM according to a Bokeh layout,
+// we subclass from ``LayoutDOM``
+export namespace Surface3d {
+  export type Attrs = p.AttrsOf<Props>
+
+  export type Props = LayoutDOM.Props & {
+    x: p.Property<string>
+    y: p.Property<string>
+    z: p.Property<string>
+    data_source: p.Property<ColumnDataSource>
+  }
+}
+
+export interface Surface3d extends Surface3d.Attrs {}
+
+export class Surface3d extends LayoutDOM {
+  properties: Surface3d.Props
+
+  constructor(attrs?: Partial<Surface3d.Attrs>) {
+    super(attrs)
+  }
+
+  static initClass() {
+    // The ``type`` class attribute should generally match exactly the name
+    // of the corresponding Python class.
+    this.prototype.type = "Surface3d"
+
+    // This is usually boilerplate. In some cases there may not be a view.
+    this.prototype.default_view = Surface3dView
+
+    // The @define block adds corresponding "properties" to the JS model. These
+    // should basically line up 1-1 with the Python model class. Most property
+    // types have counterparts, e.g. ``bokeh.core.properties.String`` will be
+    // ``p.String`` in the JS implementatin. Where the JS type system is not yet
+    // as rich, you can use ``p.Any`` as a "wildcard" property type.
+    this.define<Surface3d.Props>({
+      x:            [ p.String   ],
+      y:            [ p.String   ],
+      z:            [ p.String   ],
+      data_source:  [ p.Instance ],
+    })
+  }
+}
+Surface3d.initClass()
+"""
+
 
 # This custom extension model will have a DOM view that should layout-able in
 # Bokeh layouts, so use ``LayoutDOM`` as the base class. If you wanted to create
 # a custom tool, you could inherit from ``Tool``, or from ``Glyph`` if you
 # wanted to create a custom glyph, etc.
-class orient3d(LayoutDOM):
+class Surface3d(LayoutDOM):
 
     # The special class attribute ``__implementation__`` should contain a string
     # of JavaScript (or TypeScript) code that implements the JavaScript side
     # of the custom extension model.
-    __implementation__ = "orient3d.ts"
+    __implementation__ = TypeScript(TS_CODE)
 
     # Below are all the "properties" for this model. Bokeh properties are
     # class attributes that define the fields (and their types) that can be
@@ -101,20 +255,18 @@ TIME_RANGE_MENU = {"10 s": 10., "5 s": 5., "20 s": 20.}
 LINE_COLORS = ['green', '#42C4F7', 'red']
 FFT_COLORS = Colorblind[8]
 ORN3D_LIST = ['x', 'y', 'z']
-"""
+
 x = np.arange(0, 300, 20)
 y = np.arange(0, 300, 20)
 xx, yy = np.meshgrid(x, y)
 xx = xx.ravel()
 yy = yy.ravel()
+
 """
 xx=0
 yy=0
+"""
 
-
-def compute(t):
-    value = np.sin(xx / 50 + t / 10) * np.cos(yy / 50 + t / 10) * 50 + 50
-    return dict(x=xx, y=yy, z=value)
 
 
 class Dashboard:
@@ -147,10 +299,17 @@ class Dashboard:
         self.orn_source = ColumnDataSource(data=init_data)
 
         # init ORN3D data source
-        init_data = dict(zip(ORN3D_LIST, np.zeros((3, 1))))
-        init_data['t'] = [0.]
-        self.orn3d_source = ColumnDataSource(data=init_data)
-
+        #init_data = dict(zip(ORN3D_LIST, np.zeros((3, 1))))
+        #init_data['t'] = [0.]
+        #self.orn3d_source = ColumnDataSource(data=init_data)
+        self.orn3d_source = ColumnDataSource(data=self.compute(0))
+        self.orn3d_plot = Surface3d(x="x", y="y", z="z", data_source=self.orn3d_source, width=600, height=600)
+        #self.orn3d_plot = figure(y_range=(0.01, self.n_chan + 1 - 0.01), y_axis_label='Voltage', x_axis_label='Time (s)',
+        #                      title="ExG signal",
+        #                       plot_height=600, plot_width=1270,
+        #                       y_minor_ticks=int(10),
+        #                       tools=[ResetTool()], active_scroll=None, active_drag=None,
+        #                       active_inspect=None, active_tap=None)
         # Init table sources
         self.heart_rate_source = ColumnDataSource(data={'heart_rate': ['NA']})
         self.firmware_source = ColumnDataSource(data={'firmware_version': ['NA']})
@@ -189,13 +348,16 @@ class Dashboard:
         orn_tab = Panel(child=column([self.acc_plot, self.gyro_plot, self.mag_plot], sizing_mode='fixed'),
                         title="Orientation")
         orn3d_tab = Panel(child=self.orn3d_plot, title="Orientation visualization")
-        # orn3d_tab = Panel(child=column([self.acc_plot, self.gyro_plot, self.mag_plot], sizing_mode='fixed'),
-        #                   title="Orientation")
         fft_tab = Panel(child=self.fft_plot, title="Spectral analysis")
         self.tabs = Tabs(tabs=[exg_tab, orn_tab, fft_tab, orn3d_tab], width=1200)
-        self.doc.add_root(row([m_widgetbox, self.tabs]))
+        # self.tabs = Tabs(tabs=[orn3d_tab], width=1200)
+        # self.doc.add_root(self.tabs)
+        self.doc.add_root(row([m_widgetbox, column([self.tabs])]))
+
+        #curdoc().add_root(self.orn3d_plot)
         self.doc.add_periodic_callback(self._update_fft, 2000)
         self.doc.add_periodic_callback(self._update_heart_rate, 2000)
+        #self.doc.add_periodic_callback(self.update_orn3d, 1000)
 
 
     @gen.coroutine
@@ -226,12 +388,19 @@ class Dashboard:
         new_data['t'] = [timestamp]
         self.orn_source.stream(new_data, rollover=2 * WIN_LENGTH * ORN_SRATE)
 
+    def compute(self, t):
+        value = np.sin(xx / 50 + t / 10) * np.cos(yy / 50 + t / 10) * 50 + 50
+        return dict(x=xx, y=yy, z=value)
+
+
     @gen.coroutine
-    def update_orn3d(self, timestamp, orn3d_data):
-        # self.orn3d_source.data = compute(10)
+    def update_orn3d(self, timestamp):
+        self.orn3d_source.data = self.compute(timestamp)
+        """
         new_data = dict(zip(ORN3D_LIST, np.array(orn3d_data)[:, np.newaxis]))
         new_data['t'] = [timestamp]
         self.orn3d_source.stream(new_data, rollover=2 * WIN_LENGTH * ORN_SRATE)
+        """
 
     @gen.coroutine
     def update_info(self, new):
@@ -363,11 +532,13 @@ class Dashboard:
         self.fft_plot = figure(y_axis_label='Amplitude (uV)', x_axis_label='Frequency (Hz)', title="FFT",
                                x_range=(0, 70), plot_height=600, plot_width=1270, y_axis_type="log")
 
-        # self.orn3d_plot = orient3d(x="x", y="y", z="z", data_source=self.orn3d_source)
+
+        """
         self.orn3d_plot = figure(y_axis_label='Magnetometer [mgauss/LSB]', x_axis_label='Time (s)',
                                plot_height=600, plot_width=1270,
                                tools=[ResetTool()], active_scroll=None, active_drag=None,
                                active_inspect=None, active_tap=None)
+                               """
 
         # Set yaxis properties
         self.exg_plot.yaxis.ticker = SingleIntervalTicker(interval=1, num_minor_ticks=10)
@@ -385,8 +556,10 @@ class Dashboard:
                                 line_width=1.5, line_color=LINE_COLORS[i], alpha=.9)
             self.mag_plot.line(x='t', y=ORN_LIST[i + 6], source=self.orn_source, legend=ORN_LIST[i + 6] + " ",
                                line_width=1.5, line_color=LINE_COLORS[i], alpha=.9)
-            self.orn3d_plot.line(x='t', y=ORN3D_LIST[i], source=self.orn3d_source, legend=ORN3D_LIST[i] + " ",
-                               line_width=1.5, line_color=LINE_COLORS[i], alpha=.9)
+        """
+           self.orn3d_plot.line(x='t', y=ORN3D_LIST[i], source=self.orn3d_source, legend=ORN3D_LIST[i] + " ",
+                               line_width=1.5, line_color=LINE_COLORS[i], alpha=.9) 
+        """
 
         # Set x_range
         self.plot_list = [self.exg_plot, self.acc_plot, self.gyro_plot, self.mag_plot]
@@ -413,9 +586,9 @@ class Dashboard:
         self.mode_control = RadioButtonGroup(labels=MODE_LIST, active=0)
         self.mode_control.on_click(self._change_mode)
 
-        self.t_range = Select(title="Time window", value="10 s", options=list(TIME_RANGE_MENU.keys()), width=210)
+        self.t_range = Select(title="Time window", value="10 s", options=list(TIME_RANGE_MENU.keys()), width=200)
         self.t_range.on_change('value', self._change_t_range)
-        self.y_scale = Select(title="Y-axis Scale", value="1 mV", options=list(SCALE_MENU.keys()), width=210)
+        self.y_scale = Select(title="Y-axis Scale", value="1 mV", options=list(SCALE_MENU.keys()), width=200)
         self.y_scale.on_change('value', self._change_scale)
 
         # Create device info tables
@@ -442,7 +615,7 @@ class Dashboard:
 
         # Add widgets to the doc
         m_widgetbox = widgetbox([self.mode_control, self.y_scale, self.t_range, self.heart_rate,
-                                 self.battery, self.temperature, self.light, self.firmware], width=220)
+                                 self.battery, self.temperature, self.light, self.firmware], width=200)
         return m_widgetbox
 
     def _set_t_range(self, t_length):
@@ -489,10 +662,9 @@ if __name__ == '__main__':
             m_dashboard.doc.add_next_tick_callback(
                 partial(m_dashboard.update_orn, timestamp=T, orn_data=np.random.rand(9)))
 
-            #m_dashboard.doc.add_next_tick_callback(
-            #    partial(m_dashboard.update_orn3d, timestamp=T, orn3d_data=np.random.rand(9)))
-            m_dashboard.doc.add_next_tick_callback(partial(m_dashboard.update_orn3d, timestamp=T, orn3d_data=np.random.rand(3)))
-            time.sleep(0.2)
+            m_dashboard.doc.add_next_tick_callback(
+                partial(m_dashboard.update_orn3d, timestamp=T))
+            time.sleep(0.5)
 
 
     thread = Thread(target=my_loop)

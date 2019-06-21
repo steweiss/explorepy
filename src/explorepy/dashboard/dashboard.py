@@ -262,7 +262,7 @@ class Dashboard:
         self.gyro_plot.xaxis.visible = False
 
         self.fft_plot = figure(y_axis_label='Amplitude (uV)', x_axis_label='Frequency (Hz)', title="FFT",
-                               x_range=(0, 70), plot_height=600, plot_width=1270, y_axis_type="log")
+                               x_range=(0, 70), y_range=(1e-6, 10), plot_height=600, plot_width=1270, y_axis_type="log")
 
         # Set yaxis properties
         self.exg_plot.yaxis.ticker = SingleIntervalTicker(interval=1, num_minor_ticks=10)

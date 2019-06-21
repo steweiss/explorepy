@@ -6,7 +6,7 @@ import bluetooth
 import numpy as np
 from explorepy.filters import Filter
 from scipy import signal
-
+from explorepy.packet import TimeStamp
 
 def bt_scan():
     """"Scan for bluetooth devices
@@ -33,7 +33,6 @@ def bt_scan():
 
 
 def bin2csv(bin_file, do_overwrite=False, out_dir=None):
-
     """Binary to CSV file converter.
     This function converts the given binary file to ExG and ORN csv files.
 
@@ -50,14 +49,18 @@ def bin2csv(bin_file, do_overwrite=False, out_dir=None):
     assert os.path.isfile(bin_file), "Error: File does not exist!"
     assert extension == '.BIN', "File type error! File extension must be BIN."
     if out_dir is None:
-        out_dir = head_path
+        out_dir = head_path + '/'
 
     eeg_out_file = out_dir + filename + '_eeg.csv'
     orn_out_file = out_dir + filename + '_orn.csv'
-    assert not (os.path.isfile(eeg_out_file) and do_overwrite), eeg_out_file + " already exists!"
-    assert not (os.path.isfile(orn_out_file) and do_overwrite), orn_out_file + " already exists!"
+    marker_out_file = out_dir + filename + '_marker.csv'
+    if not do_overwrite:
+        assert os.path.isfile(eeg_out_file), eeg_out_file + " already exists!"
+        assert os.path.isfile(orn_out_file), orn_out_file + " already exists!"
+        assert os.path.isfile(marker_out_file), marker_out_file + " already exists!"
 
-    with open(bin_file, "rb") as f_bin, open(eeg_out_file, "w") as f_eeg, open(orn_out_file, "w") as f_orn:
+    with open(bin_file, "rb") as f_bin, open(eeg_out_file, "w") as f_eeg, open(orn_out_file, "w") as f_orn, \
+        open(marker_out_file, "w") as f_marker:
         parser = Parser(fid=f_bin)
         f_orn.write('TimeStamp, ax, ay, az, gx, gy, gz, mx, my, mz \n')
         f_orn.write('hh:mm:ss, mg/LSB, mg/LSB, mg/LSB, mdps/LSB, mdps/LSB, mdps/LSB,'
@@ -65,10 +68,14 @@ def bin2csv(bin_file, do_overwrite=False, out_dir=None):
         f_eeg.write('TimeStamp, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8\n')
         csv_eeg = csv.writer(f_eeg, delimiter=',')
         csv_orn = csv.writer(f_orn, delimiter=',')
+        csv_marker = csv.writer(f_marker, delimiter=',')
+
         print("Converting...")
         while True:
             try:
-                parser.parse_packet(mode='record', csv_files=(csv_eeg, csv_orn))
+                packet = parser.parse_packet(mode='record', csv_files=(csv_eeg, csv_orn))
+                if isinstance(packet, TimeStamp):
+                    csv_marker.writerow([packet.timestamp])
             except ValueError:
                 print("Binary file ended suddenly! Conversion finished!")
                 break
@@ -90,7 +97,7 @@ class HeartRateEstimator:
             MIT/BIH arrhythmia database. IEEE transactions on biomedical engineering.
         """
         self.fs = fs
-        self.threshold = .35   # Generally between 0.3125 and 0.475
+        self.threshold = .35  # Generally between 0.3125 and 0.475
         self.ns200ms = int(self.fs * .2)
         self.r_peaks_buffer = [(0., 0.)]
         self.noise_peaks_buffer = [(0., 0., 0.)]
@@ -133,7 +140,7 @@ class HeartRateEstimator:
                 print('Missing peaks!')
                 return 'NA'
             else:
-                estimated_heart_rate = int(1./np.mean(rr_intervals) * 60)
+                estimated_heart_rate = int(1. / np.mean(rr_intervals) * 60)
                 if estimated_heart_rate > 140 or estimated_heart_rate < 40:
                     print('Estimated heart rate <40 or >140!')
                     estimated_heart_rate = 'NA'
@@ -215,8 +222,8 @@ class HeartRateEstimator:
                     st_idx = 0
                 else:
                     st_idx = peak_idx - 15
-                if (peak_idx + 15) > (len(ecg_sig)-1):
-                    end_idx = len(ecg_sig)-1
+                if (peak_idx + 15) > (len(ecg_sig) - 1):
+                    end_idx = len(ecg_sig) - 1
                 else:
                     end_idx = peak_idx + 15
 
@@ -232,11 +239,11 @@ class HeartRateEstimator:
             pval = peak_val  # ecg_sig[st_idx:peak_idx].max()
 
             if pval > self.decision_threshold:
-                temp_idx = st_idx + np.argmax(ecg_sig[st_idx:peak_idx+1])
+                temp_idx = st_idx + np.argmax(ecg_sig[st_idx:peak_idx + 1])
                 temp_time = time_vector[temp_idx]
 
                 detected_peaks_idx.append(temp_idx)
-                detected_peaks_val.append(ecg_sig[st_idx:peak_idx+1].max())
+                detected_peaks_val.append(ecg_sig[st_idx:peak_idx + 1].max())
                 detected_peaks_time.append(temp_time)
                 self.push_r_peak(pval, temp_time)
 
@@ -244,7 +251,7 @@ class HeartRateEstimator:
                     st_idx = 0
                 else:
                     st_idx = peak_idx - 25
-                self.prev_max_slope = np.abs(np.diff(ecg_sig[st_idx:peak_idx+25])).max()
+                self.prev_max_slope = np.abs(np.diff(ecg_sig[st_idx:peak_idx + 25])).max()
             else:
                 self.push_noise_peak(pval, peak_idx, peak_time)
 
@@ -284,4 +291,3 @@ class HeartRateEstimator:
                         # The peak is in the previous chunk
                         # TODO: return a negative index for it!
                         pass
-

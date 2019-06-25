@@ -117,8 +117,8 @@ width = 0.3
 fig, axes = plt.subplots(2, 2)
 ch_names = ['O1', 'C3', 'C4', 'Fp1']
 for ax, pow_bef, pow_exp, ch_name in zip(axes.flatten(), bp_before.T, bp_exp.T, ch_names):
-    rects1 = ax.bar(ind - width/2, bp_before[:,3], width, label='Before experiment')
-    rects2 = ax.bar(ind + width/2, bp_exp[:,3], width, label='During experiment')
+    rects1 = ax.bar(ind - width/2, pow_bef, width, label='Before experiment')
+    rects2 = ax.bar(ind + width/2, pow_exp, width, label='During experiment')
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_ylabel('Relative power')

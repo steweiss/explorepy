@@ -77,7 +77,7 @@ const OPTIONS = {
   height: '600px',
   style: 'surface',
   showPerspective: true,
-  showGrid: true,
+  showGrid: false,
   keepAspectRatio: true,
   verticalRatio: 1.0,
   legendLabel: 'stuff',
@@ -261,11 +261,13 @@ y = np.arange(-100, 100, 5)
 
 xx, yy = np.meshgrid(x, y)
 
+"""
 r = np.sqrt((xx - 0)**2 + (yy - 0)**2)
 insideC = r < 100
 
 xx = xx[insideC]
 yy = yy[insideC]
+"""
 
 
 xx = xx.ravel()

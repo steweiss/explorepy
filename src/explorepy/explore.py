@@ -9,6 +9,7 @@ import os
 import time
 from pylsl import StreamInfo, StreamOutlet
 from threading import Thread, Timer
+import numpy as np
 
 
 class Explore:
@@ -222,22 +223,124 @@ class Explore:
 
     def _io_loop(self, device_id=0):
         is_acquiring = True
+        is_initialized = False
 
         # Wait until dashboard is initialized.
         while not hasattr(self.m_dashboard, 'doc'):
             print('wait')
             time.sleep(.2)
         while is_acquiring:
-            try:
-                packet = self.parser.parse_packet(mode="visualize", dashboard=self.m_dashboard)
-            except ValueError:
-                # If value error happens, scan again for devices and try to reconnect (see reconnect function)
-                print("Disconnected, scanning for last connected device")
-                socket = self.device[device_id].bt_connect()
-                self.parser.socket = socket
-            except bluetooth.BluetoothError as error:
-                print("Bluetooth Error: attempting reconnect. Error: ", error)
-                self.parser.socket = self.device[device_id].bt_connect()
+            if is_initialized:
+                try:
+                    packet = self.parser.parse_packet(mode="visualize", dashboard=self.m_dashboard)
+                except ValueError:
+                    # If value error happens, scan again for devices and try to reconnect (see reconnect function)
+                    print("Disconnected, scanning for last connected device")
+                    socket = self.device[device_id].bt_connect()
+                    self.parser.socket = socket
+                except bluetooth.BluetoothError as error:
+                    print("Bluetooth Error: attempting reconnect. Error: ", error)
+                    self.parser.socket = self.device[device_id].bt_connect()
+            else:
+                try:
+                    packet = self.parser.parse_packet(mode="initialize", dashboard=self.m_dashboard)
+                    is_initialized = True
+                except ValueError:
+                    # If value error happens, scan again for devices and try to reconnect (see reconnect function)
+                    print("Disconnected, scanning for last connected device")
+                    socket = self.device[device_id].bt_connect()
+                    self.parser.socket = socket
+                except bluetooth.BluetoothError as error:
+                    print("Bluetooth Error: attempting reconnect. Error: ", error)
+                    self.parser.socket = self.device[device_id].bt_connect()
+
+
+    def calibrate(self, device_id=0, file_name=None, do_overwrite=False, duration=None):
+        r"""Start getting data from the device
+
+        Args:
+            device_id (int): device id (id=None for disconnecting all devices)
+        """
+        if set(r'[<>/{}[\]~`]*%').intersection(file_name):
+            raise ValueError("Invalid character in file name")
+
+        time_offset = None
+        calibre_set_file = file_name + "_calibre_set.csv"
+        calibre_out_file = file_name + "_calibre_coef.csv"
+
+        assert not (os.path.isfile(calibre_set_file) and do_overwrite), calibre_set_file + " already exists!"
+        assert not (os.path.isfile(calibre_out_file) and do_overwrite), calibre_out_file + " already exists!"
+
+        self.socket = self.device[device_id].bt_connect()
+
+        if self.parser is None:
+            self.parser = Parser(socket=self.socket)
+
+        with open(calibre_set_file, "w") as f_set:
+            f_set.write("TimeStamp, ax, ay, az, gx, gy, gz, mx, my, mz \n")
+            csv_set = csv.writer(f_set, delimiter=",")
+            isCalibrating = [True]
+
+            def stop_acquiring(flag):
+                flag[0] = False
+
+            if duration is not None:
+                Timer(duration, stop_acquiring, [isCalibrating]).start()
+                print("Collecting the calibration set for ", duration, " seconds...")
+            else:
+                Timer(100, stop_acquiring, [isCalibrating]).start()
+                print("Collecting the calibration set for 100 seconds...")
+
+            isCalibrated = False
+            isInitialized = False
+            while isCalibrating[0]:
+                try:
+                    self.parser.parse_packet()
+                    packet = self.parser.parse_packet(mode="calibrate", csv_files=csv_set)
+                except ValueError:
+                    # If value error happens, scan again for devices and try to reconnect (see reconnect function)
+                    print("Disconnected, scanning for last connected device")
+                    socket = self.device[device_id].bt_connect()
+                    self.parser.socket = socket
+                except bluetooth.BluetoothError as error:
+                    print("Bluetooth Error: attempting reconnect. Error: ", error)
+                    self.parser.socket = self.device[device_id].bt_connect()
+
+            if duration is not None:
+                print("Data acquisition finished after ", duration, " seconds.")
+            else:
+                print("Data acquisition finished after 100 seconds.")
+            f_set.close()
+        with open(calibre_set_file, "r") as f_set, open(calibre_out_file, "w") as f_coef:
+            f_coef.write("kx, ky, kz, mx_offset, my_offset, mz_offset\n")
+            csv_reader = csv.reader(f_set, delimiter=",")
+            csv_coef = csv.writer(f_coef, delimiter=",")
+            #for row in csv_reader:
+            #    print(row)
+            np_set = list(csv_reader)
+            np_set = np.array(np_set[1:], dtype=np.float)
+            #print(np_set)
+            #print(len(np_set))
+            mag_set_x = np.sort(np_set[:, -3])
+            mag_set_y = np.sort(np_set[:, -2])
+            mag_set_z = np.sort(np_set[:, -1])
+            mx_offset = 0.5 * (mag_set_x[0] + mag_set_x[-1])
+            my_offset = 0.5 * (mag_set_y[0] + mag_set_y[-1])
+            mz_offset = 0.5 * (mag_set_z[0] + mag_set_z[-1])
+            kx = 0.5 * (mag_set_x[-1] - mag_set_x[0])
+            ky = 0.5 * (mag_set_y[-1] - mag_set_y[0])
+            kz = 0.5 * (mag_set_z[-1] - mag_set_z[0])
+            k = np.sort(np.array([kx,ky,kz]))
+            kx = k[1] / kx
+            ky = k[1] / ky
+            kz = k[1] / kz
+            calibre_set = np.array([kx, ky, kz, mx_offset, my_offset, mz_offset])
+            csv_coef.writerow(calibre_set)
+            f_set.close()
+            f_coef.close()
+        isCalibrating = [False]
+
+
 
 
 if __name__ == '__main__':

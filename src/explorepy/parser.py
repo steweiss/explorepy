@@ -134,6 +134,12 @@ class Parser:
                     packet.apply_bp_filter(exg_filter=self.filter)
             packet.push_to_dashboard(dashboard)
 
+        elif mode == "calibrate":
+            #assert isinstance(csv_files, tuple), "Invalid csv writer objects!"
+            if isinstance(packet, Orientation):
+                packet.write_to_csv(csv_files)
+        elif mode =="initialize":
+
         return packet
 
     def read(self, n_bytes):

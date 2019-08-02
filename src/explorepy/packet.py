@@ -249,8 +249,11 @@ class Orientation(Packet):
         #TO CHECK WITH APP
         theta = np.arctan(self.NED[2][2])/np.pi*180
         phi = np.arctan(self.NED[2][1]/self.NED[2][0])/np.pi*180
-        self.acc=theta*np.ones(3)
-        self.gyro=phi*np.ones(3)
+        #self.acc=theta*np.ones(3)
+        #self.gyro=phi*np.ones(3)
+        self.acc = self.NED[2]
+        self.gyro = self.NED[1]
+        self.mag = self.NED[0]
         return [theta, phi]
 
 class Environment(Packet):

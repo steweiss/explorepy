@@ -246,8 +246,9 @@ CHAN_LIST = ['Ch1', 'Ch2', 'Ch3', 'Ch4', 'Ch5', 'Ch6', 'Ch7', 'Ch8']
 DEFAULT_SCALE = 10 ** -3  # Volt
 N_MOVING_AVERAGE = 60
 V_TH = [10**-5, 5 * 10 ** -3]  # Noise threshold for ECG (Volt)
-ORN_LIST = ['accX', 'accY', 'accZ', 'gyroX', 'gyroY', 'gyroZ', 'magX', 'magY', 'magZ']
-
+#ORN_LIST = ['accX', 'accY', 'accZ', 'gyroX', 'gyroY', 'gyroZ', 'magX', 'magY', 'magZ']
+#ORN_LIST = ['UP_S', 'UP_W', 'UP_U', 'Left_S', 'Left_W', 'Left_U', 'Front_S', 'Front_W', 'Front_U']
+ORN_LIST = ['UP_x', 'UP_y', 'UP_z', 'East_x', 'East_y', 'East_z', 'North_x', 'North_y', 'North_z']
 SCALE_MENU = {"1 uV": 6., "5 uV": 5.3333, "10 uV": 5., "100 uV": 4., "500 uV": 3.3333, "1 mV": 3., "5 mV": 2.3333,
               "10 mV": 2., "100 mV": 1.}
 TIME_RANGE_MENU = {"10 s": 10., "5 s": 5., "20 s": 20.}
@@ -524,17 +525,19 @@ class Dashboard:
                                y_minor_ticks=int(10),
                                tools=[ResetTool()], active_scroll=None, active_drag=None,
                                active_inspect=None, active_tap=None)
-
-        self.mag_plot = figure(y_axis_label='Magnetometer [mgauss/LSB]', x_axis_label='Time (s)',
+        #'Magnetometer [mgauss/LSB]'
+        self.mag_plot = figure(y_axis_label='North', x_axis_label='Time (s)',
                                plot_height=230, plot_width=1270,
                                tools=[ResetTool()], active_scroll=None, active_drag=None,
                                active_inspect=None, active_tap=None)
-        self.acc_plot = figure(y_axis_label='Accelerometer [mg/LSB]',
+        #'Accelerometer [mg/LSB]'
+        self.acc_plot = figure(y_axis_label='Up',
                                plot_height=190, plot_width=1270,
                                tools=[ResetTool()], active_scroll=None, active_drag=None,
                                active_inspect=None, active_tap=None)
         self.acc_plot.xaxis.visible = False
-        self.gyro_plot = figure(y_axis_label='Gyroscope [mdps/LSB]',
+        #'Gyroscope [mdps/LSB]'
+        self.gyro_plot = figure(y_axis_label='East',
                                 plot_height=190, plot_width=1270,
                                 tools=[ResetTool()], active_scroll=None, active_drag=None,
                                 active_inspect=None, active_tap=None)

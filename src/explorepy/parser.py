@@ -53,7 +53,7 @@ def generate_packet(pid, timestamp, bin_data):
 
 
 class Parser:
-    def __init__(self, bp_freq=None, notch_freq=50, socket=None, fid=None):
+    def __init__(self, bp_freq=None, notch_freq=50, socket=None, fid=None, calibre_set=None):
         """Parser class for explore device
 
         Args:
@@ -67,6 +67,10 @@ class Parser:
         self.dt_int16 = np.dtype(np.int16).newbyteorder('<')
         self.dt_uint16 = np.dtype(np.uint16).newbyteorder('<')
         self.time_offset = None
+        self.calibre_set = calibre_set
+        self.init_set = None
+        self.ED_prv = None
+        #self.ED_prv = [np.array([0, 0, 1]), np.array([0, 1, 0])]
         if bp_freq is not None:
             assert bp_freq[0] < bp_freq[1], "High cut-off frequency must be larger than low cut-off frequency"
             self.bp_freq = bp_freq
@@ -132,14 +136,42 @@ class Parser:
                     packet.apply_notch_filter(exg_filter=self.filter)
                 if self.apply_bp_filter:
                     packet.apply_bp_filter(exg_filter=self.filter)
+            if isinstance(packet, Orientation):
+                self.compute_NED(packet)
             packet.push_to_dashboard(dashboard)
 
         elif mode == "calibrate":
             #assert isinstance(csv_files, tuple), "Invalid csv writer objects!"
             if isinstance(packet, Orientation):
                 packet.write_to_csv(csv_files)
-        elif mode =="initialize":
 
+        elif mode == "initialize":
+            if isinstance(packet, Orientation):
+                th = np.zeros(3)
+                T_init = np.zeros((3, 3))
+                D = packet.acc / (np.dot(packet.acc, packet.acc) ** 0.5)
+                E = np.cross(D, packet.mag)
+                E = E / (np.dot(E, E) ** 0.5)
+
+                N = np.cross(E, D)
+                N = N / (np.dot(N, N) ** 0.5)
+                T_init[0][0] = N[0]
+                T_init[0][1] = E[0]
+                T_init[0][2] = D[0]
+
+                T_init[1][0] = N[1]
+                T_init[1][1] = E[1]
+                T_init[1][2] = D[1]
+
+                T_init[2][0] = N[2]
+                T_init[2][1] = E[2]
+                T_init[2][2] = D[2]
+
+                N_init = np.matmul(np.transpose(T_init), N)
+                E_init = np.matmul(np.transpose(T_init), E)
+                D_init = np.matmul(np.transpose(T_init), D)
+                self.init_set = [T_init, N_init, E_init, D_init]
+                self.ED_prv = [E, D]
         return packet
 
     def read(self, n_bytes):
@@ -161,3 +193,79 @@ class Parser:
             raise ValueError("Number of received bytes is less than expected")
             # TODO: Create a specific exception for this case
         return byte_data
+
+    def compute_NED(self, packet):
+        #TOCHECK
+        [kx, ky, kz, mx_offset, my_offset, mz_offset] = self.calibre_set
+        T_init = self.init_set[0]
+        N_init = self.init_set[1]
+        E_init = self.init_set[2]
+        D_init = self.init_set[3]
+        D_prv = self.ED_prv[1]
+        E_prv = self.ED_prv[0]
+        acc = packet.acc
+        acc = acc / (np.dot(acc, acc) ** 0.5)
+        gyro = packet.gyro * 1.745329e-5 #radian per second
+        mag = np.array([0, 0, 0])
+        mag[0] = kx * (packet.mag[0] - mx_offset)
+        mag[1] = -ky * (packet.mag[1] - my_offset)
+        mag[2] = kz * (packet.mag[2] - mz_offset)
+        D = acc
+        dD = D-D_prv
+        da = np.cross(D_prv, dD)
+        E = np.cross(D, mag)
+        E = E / (np.dot(E, E) ** 0.5)
+        dE = E-E_prv
+        dm = np.cross(E_prv, dE)
+        dg = 0.05 * gyro
+        dth = -0.95 * dg + 0.025 * da + 0.025 * dm
+        D = D_prv + np.cross(dth, D_prv)
+        D = D / (np.dot(D, D) ** 0.5)
+        E = E_prv + np.cross(dth, E_prv)
+        E = E / (np.dot(E, E) ** 0.5)
+        Err = np.dot(D, E)
+        D_tmp = D - 0.5*Err*E
+        E_tmp = E - 0.5*Err*D
+        D = D_tmp / (np.dot(D_tmp, D_tmp) ** 0.5)
+        E = E_tmp / (np.dot(E_tmp, E_tmp) ** 0.5)
+        D_prv = D
+        E_prv = E
+        N = np.cross(E, D)
+        N = N / (np.dot(N, N) ** 0.5)
+        T = np.zeros((3,3))
+
+        T[0][0] = N[0]
+        T[0][1] = E[0]
+        T[0][2] = D[0]
+
+        T[1][0] = N[1]
+        T[1][1] = E[1]
+        T[1][2] = D[1]
+
+        T[2][0] = N[2]
+        T[2][1] = E[2]
+        T[2][2] = D[2]
+
+        T_test = np.matmul(T, T_init.transpose())
+
+        N = np.matmul(T_test.transpose(), N_init)
+        E = np.matmul(T_test.transpose(), E_init)
+        D = np.matmul(T_test.transpose(), D_init)
+        matrix = np.identity(4)
+        matrix[0][0] = N[0]
+        matrix[0][1] = E[0]
+        matrix[0][2] = D[0]
+
+        matrix[1][0] = N[1]
+        matrix[1][1] = E[1]
+        matrix[1][2] = D[1]
+
+        matrix[2][0] = N[2]
+        matrix[2][1] = E[2]
+        matrix[2][2] = D[2]
+        N = N / (np.dot(N, N) ** 0.5)
+        E = E / (np.dot(E, E) ** 0.5)
+        D = D / (np.dot(D, D) ** 0.5)
+        packet.NED = np.array([N, E, D])
+        self.ED_prv = [E, D]
+        print(packet.compute_angle())

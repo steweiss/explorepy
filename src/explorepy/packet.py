@@ -228,6 +228,7 @@ class Orientation(Packet):
         self.acc = 0.061 * data[0:3]  # Unit [mg/LSB]
         self.gyro = 8.750 * data[3:6]  # Unit [mdps/LSB]
         self.mag = 1.52 * data[6:]  # Unit [mgauss/LSB]
+        self.NED = np.zeros((3,3))
 
     def _check_fletcher(self, fletcher):
         assert fletcher == b'\xaf\xbe\xad\xde', "Fletcher error!"
@@ -244,74 +245,13 @@ class Orientation(Packet):
     def push_to_dashboard(self, dashboard):
         data = self.acc.tolist() + self.gyro.tolist() + self.mag.tolist()
         dashboard.doc.add_next_tick_callback(partial(dashboard.update_orn, timestamp=self.timestamp, orn_data=data))
-
-    def compute_angle(self, E_prv, D_prv, calibre_set=None, init_set=None):
-        [kx, ky, kz, mx_offset, my_offset, mz_offset] = calibre_set
-        T_init = init_set.T
-        N_init = init_set.N
-        E_init = init_set.E
-        D_init = init_set.D
-        acc = self.acc
-        acc = acc / (np.dot(acc, acc) ** 0.5)
-        gyro = self.gyro * 1.745329e-5 #radian per second
-        mag = np.array([0, 0, 0])
-        mag[0] = kx * (self.mag[0] - mx_offset)
-        mag[1] = -ky * (self.mag[1] - my_offset)
-        mag[2] = kz * (self.mag[2] - mz_offset)
-        D = acc
-        dD = D-D_prv
-        da = np.cross(D_prv, dD)
-        E = np.cross(D, mag)
-        E = E / (np.dot(E, E) ** 0.5)
-        dE = E-E_prv
-        dm = np.cross(E_prv, dE)
-        dg = 0.05 * gyro
-        dth = -0.95 * dg + 0.025 * da + 0.025 * dm
-        D = D_prv + np.cross(dth, D_prv)
-        D = D / (np.dot(D, D) ** 0.5)
-        E = E_prv + np.cross(dth, E_prv)
-        E = E / (np.dot(E, E) ** 0.5)
-        Err = np.dot(D, E)
-        D_tmp = D - 0.5*Err*E
-        E_tmp = E - 0.5*Err*D
-        D = D_tmp / (np.dot(D_tmp, D_tmp) ** 0.5)
-        E = E_tmp / (np.dot(E_tmp, E_tmp) ** 0.5)
-        D_prv = D
-        E_prv = E
-        N = np.cross(E, D)
-        N = N / (np.dot(N, N) ** 0.5)
-        T = np.zeros((3,3))
-
-        T[0][0] = N[0]
-        T[0][1] = E[0]
-        T[0][2] = D[0]
-
-        T[1][0] = N[1]
-        T[1][1] = E[1]
-        T[1][2] = D[1]
-
-        T[2][0] = N[2]
-        T[2][1] = E[2]
-        T[2][2] = D[2]
-
-        T_test = np.matmul(T, T_init.transpose())
-
-        N = np.matmul(T_test.transpose(), N_init)
-        E = np.matmul(T_test.transpose(), E_init)
-        D = np.matmul(T_test.transpose(), D_init)
-        matrix = np.identity(4)
-        matrix[0] = N[0]
-        matrix[4] = E[0]
-        matrix[8] = D[0]
-
-        matrix[1] = N[1]
-        matrix[5] = E[1]
-        matrix[9] = D[1]
-
-        matrix[2] = N[2]
-        matrix[6] = E[2]
-        matrix[10] = D[2]
-
+    def compute_angle(self, init_set=None):
+        #TO CHECK WITH APP
+        theta = np.arctan(self.NED[2][2])/np.pi*180
+        phi = np.arctan(self.NED[2][1]/self.NED[2][0])/np.pi*180
+        self.acc=theta*np.ones(3)
+        self.gyro=phi*np.ones(3)
+        return [theta, phi]
 
 class Environment(Packet):
     """Environment data packet"""

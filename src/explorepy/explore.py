@@ -197,7 +197,7 @@ class Explore:
                 self.parser = Parser(self.socket)
         print("Data acquisition finished after ", duration, " seconds.")
 
-    def visualize(self, n_chan, device_id=0, bp_freq=(1, 30), notch_freq=50):
+    def visualize(self, n_chan, device_id=0, bp_freq=(1, 30), notch_freq=50, calibre_file=None):
         r"""Visualization of the signal in the dashboard
 
         Args:
@@ -207,18 +207,21 @@ class Explore:
             if it is None.
             notch_freq (int): Line frequency for notch filter (50 or 60 Hz), No notch filter if it is None
         """
+        self.socket = self.device[device_id].bt_connect()
+        with open(calibre_file, "r") as f_calibre:
+            csv_reader_calibre = csv.reader(f_calibre, delimiter=",")
+            calibre_set = list(csv_reader_calibre)
+            calibre_set = np.asarray(calibre_set[1], dtype=np.float64)
+
+        if self.parser is None:
+            self.parser = Parser(socket=self.socket, bp_freq=bp_freq, notch_freq=notch_freq, calibre_set=calibre_set)
+
         self.m_dashboard = Dashboard(n_chan=n_chan)
         self.m_dashboard.start_server()
 
         thread = Thread(target=self._io_loop)
         thread.setDaemon(True)
         thread.start()
-
-        self.socket = self.device[device_id].bt_connect()
-
-        if self.parser is None:
-            self.parser = Parser(socket=self.socket, bp_freq=bp_freq, notch_freq=notch_freq)
-
         self.m_dashboard.start_loop()
 
     def _io_loop(self, device_id=0):
@@ -243,8 +246,11 @@ class Explore:
                     self.parser.socket = self.device[device_id].bt_connect()
             else:
                 try:
-                    packet = self.parser.parse_packet(mode="initialize", dashboard=self.m_dashboard)
-                    is_initialized = True
+                    packet = self.parser.parse_packet(mode="initialize")
+                    if hasattr(packet, 'NED'):
+                        if self.parser.init_set is not None:
+                            is_initialized = True
+
                 except ValueError:
                     # If value error happens, scan again for devices and try to reconnect (see reconnect function)
                     print("Disconnected, scanning for last connected device")
@@ -253,7 +259,6 @@ class Explore:
                 except bluetooth.BluetoothError as error:
                     print("Bluetooth Error: attempting reconnect. Error: ", error)
                     self.parser.socket = self.device[device_id].bt_connect()
-
 
     def calibrate(self, device_id=0, file_name=None, do_overwrite=False, duration=None):
         r"""Start getting data from the device
@@ -290,9 +295,6 @@ class Explore:
             else:
                 Timer(100, stop_acquiring, [isCalibrating]).start()
                 print("Collecting the calibration set for 100 seconds...")
-
-            isCalibrated = False
-            isInitialized = False
             while isCalibrating[0]:
                 try:
                     self.parser.parse_packet()
@@ -338,7 +340,6 @@ class Explore:
             csv_coef.writerow(calibre_set)
             f_set.close()
             f_coef.close()
-        isCalibrating = [False]
 
 
 

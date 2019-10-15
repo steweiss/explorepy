@@ -57,7 +57,7 @@ def generate_packet(pid, timestamp, bin_data):
 
 
 class Parser:
-    def __init__(self, bp_freq=None, notch_freq=50, socket=None, fid=None):
+    def __init__(self, bp_freq=None, notch_freq=50, zbs_freq=None, socket=None, fid=None):
         """Parser class for explore device
 
         Args:
@@ -78,12 +78,21 @@ class Parser:
         else:
             self.apply_bp_filter = False
             self.bp_freq = (0, 100)  # dummy values
+
+        if zbs_freq is not None:
+            assert zbs_freq[0] < zbs_freq[1], "High cut-off frequency must be larger than low cut-off frequency"
+            self.zbs_freq = zbs_freq
+            self.apply_zbs_filter = True
+        else:
+            self.apply_zbs_filter = False
+            self.zbs_freq = (0.125, 0.375)  # dummy values
+
         self.notch_freq = notch_freq
         self.firmware_version = None
         self.filter = None
-        if self.apply_bp_filter or notch_freq:
+        if self.apply_bp_filter or notch_freq or self.apply_zbs_filter:
             # Initialize filters
-            self.filter = Filter(l_freq=self.bp_freq[0], h_freq=self.bp_freq[1], line_freq=notch_freq)
+            self.filter=Filter(l_freq=self.bp_freq[0],h_freq=self.bp_freq[1],line_freq=notch_freq,l_zfreq=self.zbs_freq[0],h_zfreq=self.zbs_freq[1])
 
 
     def parse_packet(self, mode="print", csv_files=None, outlets=None, dashboard=None):

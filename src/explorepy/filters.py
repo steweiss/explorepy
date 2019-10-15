@@ -3,7 +3,7 @@ from scipy.signal import butter, lfilter, iirnotch, iirfilter
 
 
 class Filter:
-    def __init__(self, l_freq, h_freq, line_freq=50, order=5):
+    def __init__(self, l_freq, h_freq, l_zfreq, h_zfreq, line_freq=50, order=5):
         self.low_cutoff_freq = l_freq
         self.high_cutoff_freq = h_freq
         self.line_freq = line_freq
@@ -11,6 +11,9 @@ class Filter:
         self.order = order
         self.bp_param = None
         self.notch_param = None
+        self.low_cutoff_zfreq = l_zfreq * self.sample_frequency
+        self.high_cutoff_zfreq = h_zfreq * self.sample_frequency
+        self.zbp_param = None
 
     def _design_filter(self, nchan):
         nyq = 0.5 * self.sample_frequency
@@ -30,6 +33,14 @@ class Filter:
         zi = np.zeros((nchan, 10))
         self.notch_param = {'a': a, 'b': b, 'zi': zi}
 
+    def _design_zfilter(self, nchan):
+        nyq = 0.5 * self.sample_frequency
+        low_zfreq = self.low_cutoff_zfreq / nyq
+        high_zfreq = self.high_cutoff_zfreq / nyq
+        b, a = butter(self.order, [low_zfreq, high_zfreq], btype='bandstop')
+        zi = np.zeros((nchan, self.order * 2))
+        self.zbs_param = {'a': a, 'b': b, 'zi': zi}
+
     def apply_bp_filter(self, raw_data):
         if len(raw_data.shape) < 2:
             raw_data = np.array(raw_data)[np.newaxis, :]
@@ -46,6 +57,16 @@ class Filter:
 
         filtered_data, zi = lfilter(self.notch_param['b'], self.notch_param['a'], raw_data, zi=self.notch_param['zi'])
         self.notch_param['zi'] = zi
+        return filtered_data
+
+    def apply_zbs_filter(self, raw_data):
+        if len(raw_data.shape) < 2:
+            raw_data = np.array(raw_data)[np.newaxis, :]
+        if self.zbs_param is None:
+            self._design_zfilter(nchan=raw_data.shape[0])
+
+        filtered_data, zi = lfilter(self.zbs_param['b'], self.zbs_param['a'], raw_data, zi=self.zbs_param['zi'])
+        self.zbs_param['zi'] = zi
         return filtered_data
 
 

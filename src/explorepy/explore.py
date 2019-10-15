@@ -200,7 +200,7 @@ class Explore:
                 self.parser = Parser(self.socket)
         print("Data acquisition finished after ", duration, " seconds.")
 
-    def visualize(self, n_chan, device_id=0, bp_freq=(1, 30), notch_freq=50):
+    def visualize(self, n_chan, device_id=0, bp_freq=(1, 30), notch_freq=50, zbs_freq=None):
         r"""Visualization of the signal in the dashboard
         Args:
             n_chan (int): Number of channels device_id (int): Device ID (in case of multiple device connection)
@@ -220,7 +220,7 @@ class Explore:
             self.socket = self.device[device_id].bt_connect()
 
         if self.parser is None:
-            self.parser = Parser(socket=self.socket, bp_freq=bp_freq, notch_freq=notch_freq)
+            self.parser = Parser(socket=self.socket, bp_freq=bp_freq, notch_freq=notch_freq, zbs_freq=zbs_freq)
 
         self.m_dashboard.start_loop()
 

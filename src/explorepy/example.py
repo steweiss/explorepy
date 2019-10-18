@@ -22,7 +22,7 @@ myexplore.connect(device_name= "Explore_E02B", device_addr="00:13:43:86:E0:2B")
 #myexplore.record_data(filename, do_overwrite=True)
 #myexplore.push2lsl(n_chan=8)
 #myexplore.calibrate(file_name= filename)
-myexplore.visualize(n_chan = 4, notch_freq=50, bp_freq=(1,30), zbs_freq=(0.125, 0.375))  # Give number of channels (4 or 8)
+myexplore.visualize(n_chan = 8, notch_freq=50, bp_freq=(1,30), z_freq=0.25, hp_freq=1, Fs=250)  # Give number of channels (4 or 8)
 
 
 

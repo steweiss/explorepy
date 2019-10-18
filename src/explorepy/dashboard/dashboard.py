@@ -37,7 +37,7 @@ FFT_COLORS = Colorblind[8]
 class Dashboard:
     """Explorepy dashboard class"""
 
-    def __init__(self, n_chan):
+    def __init__(self, n_chan, Fs=250):
         self.n_chan = n_chan
         self.y_unit = DEFAULT_SCALE
         self.offsets = np.arange(1, self.n_chan + 1)[:, np.newaxis].astype(float)

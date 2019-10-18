@@ -84,6 +84,21 @@ class EEG(Packet):
         """
         self.data = exg_filter.apply_notch_filter(self.data)
 
+    def apply_zbs_filter(self, exg_filter):
+        """Bandpass filtering of ExG data
+
+        Args:
+        exg_filter: Filter object
+        """
+        self.data = exg_filter.apply_zbs_filter(self.data)
+
+    def apply_hp_filter(self, exg_filter):
+        """Bandpass filtering of ExG data
+
+        Args:
+        exg_filter: Filter object
+        """
+        self.data = exg_filter.apply_hp_filter(self.data)
 
     def push_to_lsl(self, outlet):
         """Push data to lsl socket
@@ -97,7 +112,7 @@ class EEG(Packet):
 
     def push_to_dashboard(self, dashboard):
         n_sample = self.data.shape[1]
-        time_vector = np.linspace(self.timestamp, self.timestamp+(n_sample-1)/250., n_sample)
+        time_vector = np.linspace(self.timestamp, self.timestamp+(n_sample-1)/500., n_sample)
         dashboard.doc.add_next_tick_callback(partial(dashboard.update_exg, time_vector=time_vector, ExG=self.data))
 
 

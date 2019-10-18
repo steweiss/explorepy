@@ -1,25 +1,27 @@
 import numpy as np
-from scipy.signal import butter, lfilter, iirnotch, iirfilter
+from scipy.signal import butter, lfilter, iirnotch, iirfilter, sosfilt, sosfilt_zi
 
 
 class Filter:
-    def __init__(self, l_freq, h_freq, l_zfreq, h_zfreq, line_freq=50, order=5):
+    def __init__(self, l_freq, h_freq, zfreq, hp_freq, line_freq=50, order=5, Fs=250):
         self.low_cutoff_freq = l_freq
         self.high_cutoff_freq = h_freq
         self.line_freq = line_freq
-        self.sample_frequency = 250.0
+        self.sample_frequency = Fs
         self.order = order
         self.bp_param = None
         self.notch_param = None
-        self.low_cutoff_zfreq = l_zfreq * self.sample_frequency
-        self.high_cutoff_zfreq = h_zfreq * self.sample_frequency
+        self.zfreq = zfreq * self.sample_frequency
+        self.hp_freq = hp_freq
+        self.zbs_param = None
         self.zbp_param = None
+        self.hp_param = None
 
     def _design_filter(self, nchan):
         nyq = 0.5 * self.sample_frequency
         low_freq = self.low_cutoff_freq / nyq
         high_freq = self.high_cutoff_freq / nyq
-        b, a = butter(self.order, [low_freq, high_freq], btype='band')
+        b, a = butter(self.order, [low_freq, high_freq], btype='bandpass')
         zi = np.zeros((nchan, self.order*2))
         self.bp_param = {'a': a, 'b': b, 'zi': zi}
 
@@ -35,18 +37,27 @@ class Filter:
 
     def _design_zfilter(self, nchan):
         nyq = 0.5 * self.sample_frequency
-        low_zfreq = self.low_cutoff_zfreq / nyq
-        high_zfreq = self.high_cutoff_zfreq / nyq
-        b, a = butter(self.order, [low_zfreq, high_zfreq], btype='bandstop')
-        zi = np.zeros((nchan, self.order * 2))
+        low_zfreq = (0.5) - 2/ nyq
+        high_zfreq = (0.5) + 2/ nyq
+        b, a = iirfilter(5, [low_zfreq, high_zfreq], btype='bandstop', ftype='butter')
+        zi = np.zeros((nchan, self.order*2))
         self.zbs_param = {'a': a, 'b': b, 'zi': zi}
+
+    def _design_hp_filter(self, nchan):
+        nyq = 0.5 * self.sample_frequency
+        low_freq = self.hp_freq / nyq
+        sos = butter(self.order, low_freq, btype='highpass', output='sos')
+        zi = sosfilt_zi(sos)
+        zi = np.zeros((3,nchan,2))
+        #zi =np.array([zi, zi])
+        #zi2 = np.concatenate((zi[..., np.newaxis], zi[..., np.newaxis]), axis=2)  # shape = (3,2,2)
+        self.hp_param = {'sos' : sos, 'zi' : zi}
 
     def apply_bp_filter(self, raw_data):
         if len(raw_data.shape) < 2:
             raw_data = np.array(raw_data)[np.newaxis, :]
         if self.bp_param is None:
             self._design_filter(nchan=raw_data.shape[0])
-
         filtered_data, zi = lfilter(self.bp_param['b'], self.bp_param['a'], raw_data, zi=self.bp_param['zi'])
         self.bp_param['zi'] = zi
         return filtered_data
@@ -69,6 +80,14 @@ class Filter:
         self.zbs_param['zi'] = zi
         return filtered_data
 
+    def apply_hp_filter (self, raw_data):
+        if len(raw_data.shape) < 2:
+            raw_data = np.array(raw_data)[np.newaxis, :]
+        if self.hp_param is None:
+            self._design_hp_filter(nchan=raw_data.shape[0])
+        filtered_data, zi = sosfilt(sos=self.hp_param['sos'], x=raw_data, zi=self.hp_param['zi'])
+        self.hp_param['zi'] = zi
+        return filtered_data
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt

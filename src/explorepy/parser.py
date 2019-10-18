@@ -57,7 +57,7 @@ def generate_packet(pid, timestamp, bin_data):
 
 
 class Parser:
-    def __init__(self, bp_freq=None, notch_freq=50, zbs_freq=None, socket=None, fid=None):
+    def __init__(self, bp_freq=None, notch_freq=50, z_freq=None, hp_freq=None, Fs=250, socket=None, fid=None):
         """Parser class for explore device
 
         Args:
@@ -79,20 +79,26 @@ class Parser:
             self.apply_bp_filter = False
             self.bp_freq = (0, 100)  # dummy values
 
-        if zbs_freq is not None:
-            assert zbs_freq[0] < zbs_freq[1], "High cut-off frequency must be larger than low cut-off frequency"
-            self.zbs_freq = zbs_freq
+        if z_freq is not None:
+            self.z_freq = z_freq
             self.apply_zbs_filter = True
         else:
             self.apply_zbs_filter = False
-            self.zbs_freq = (0.125, 0.375)  # dummy values
+            self.z_freq = 0.25  # dummy values
 
+        if hp_freq is not None:
+            self.hp_freq = hp_freq
+            self.apply_hp_filter = True
+        else:
+            self.apply_hp_filter = False
+            self.hp_freq = 0  # dummy values
         self.notch_freq = notch_freq
         self.firmware_version = None
         self.filter = None
-        if self.apply_bp_filter or notch_freq or self.apply_zbs_filter:
+        if self.apply_bp_filter or notch_freq or self.apply_zbs_filter or self.apply_hp_filter:
             # Initialize filters
-            self.filter=Filter(l_freq=self.bp_freq[0],h_freq=self.bp_freq[1],line_freq=notch_freq,l_zfreq=self.zbs_freq[0],h_zfreq=self.zbs_freq[1])
+            self.filter=Filter(l_freq=self.bp_freq[0],h_freq=self.bp_freq[1],line_freq=notch_freq,\
+                               zfreq=self.z_freq, hp_freq=self.hp_freq, Fs=Fs)
 
 
     def parse_packet(self, mode="print", csv_files=None, outlets=None, dashboard=None):
@@ -145,6 +151,14 @@ class Parser:
             if isinstance(packet, EEG):
                 if self.notch_freq:
                     packet.apply_notch_filter(exg_filter=self.filter)
+                if self.apply_hp_filter:
+                    packet.apply_hp_filter(exg_filter=self.filter)
+                if self.apply_zbs_filter:
+                    temp_data = packet.data
+                    packet.apply_zbs_filter(exg_filter=self.filter)
+                    Zac_amp = temp_data-packet.data #(n_channel*n_samples)
+                    mag = np.linalg.norm(Zac_amp, axis=1, ord=2)
+                    print(mag)
                 if self.apply_bp_filter:
                     packet.apply_bp_filter(exg_filter=self.filter)
             packet.push_to_dashboard(dashboard)

@@ -16,7 +16,7 @@ from bokeh.core.property.validation import validate
 from tornado import gen
 
 
-EEG_SRATE = 250  # Hz
+#EEG_SRATE = 250  # Hz
 ORN_SRATE = 20  # Hz
 WIN_LENGTH = 10  # Seconds
 MODE_LIST = ['EEG', 'ECG']
@@ -45,6 +45,7 @@ class Dashboard:
         self.exg_mode = 'EEG'
         self.rr_estimator = None
         self.win_length = WIN_LENGTH
+        self.Fs = Fs
 
         # Init ExG data source
         exg_temp = np.zeros((n_chan, 2))
@@ -122,7 +123,7 @@ class Dashboard:
         ExG = self.offsets + ExG / self.y_unit
         new_data = dict(zip(self.chan_key_list, ExG))
         new_data['t'] = time_vector
-        self.exg_source.stream(new_data, rollover=2 * EEG_SRATE * WIN_LENGTH)
+        self.exg_source.stream(new_data, rollover=2 * self.Fs * WIN_LENGTH)
 
     @gen.coroutine
     def update_orn(self, timestamp, orn_data):
@@ -175,9 +176,9 @@ class Dashboard:
         exg_data = np.array([self.exg_source.data[key] for key in self.chan_key_list])
 
         # Check if the length of data is enough for FFT
-        if exg_data.shape[1] < EEG_SRATE * 4.5:
+        if exg_data.shape[1] < self.Fs * 4.5:
             return
-        fft_content, freq = get_fft(exg_data)
+        fft_content, freq = get_fft(exg_data, self.Fs)
         data = dict(zip(self.chan_key_list, fft_content))
         data['f'] = freq
         self.fft_source.data = data
@@ -350,12 +351,12 @@ class Dashboard:
             plot.x_range.min_interval = t_length
 
 
-def get_fft(exg):
+def get_fft(exg, Fs):
     """Compute FFT"""
     n_chan, n_sample = exg.shape
-    L = n_sample / EEG_SRATE
+    L = n_sample / Fs
     n = 1024
-    freq = EEG_SRATE * np.arange(int(n / 2)) / n
+    freq = Fs * np.arange(int(n / 2)) / n
     fft_content = np.fft.fft(exg, n=n) / n
     fft_content = np.abs(fft_content[:, range(int(n / 2))])
     return fft_content[:, 1:], freq[1:]

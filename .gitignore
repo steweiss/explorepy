@@ -70,3 +70,5 @@ docs/_build
 
 # Mypy Cache
 .mypy_cache/
+src/explorepy/dashboard/example.py
+

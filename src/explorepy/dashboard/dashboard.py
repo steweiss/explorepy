@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import time
+import pandas as pd
+import pickle
 from functools import partial
 from threading import Thread
 from explorepy.tools import HeartRateEstimator
-
+from os.path import dirname, join
 from bokeh.layouts import widgetbox, row, column
-from bokeh.models import ColumnDataSource, ResetTool, PrintfTickFormatter, Panel, Tabs
+from bokeh.models import ColumnDataSource, ResetTool, PrintfTickFormatter, Panel, Tabs, Button, ColumnDataSource, CustomJS, DataTable,NumberFormatter, RangeSlider, TableColumn
 from bokeh.plotting import figure
 from bokeh.server.server import Server
 from bokeh.palettes import Colorblind
-from bokeh.models.widgets import Select, DataTable, TableColumn, RadioButtonGroup
+from bokeh.models.widgets import Select, DataTable, TableColumn, RadioButtonGroup, Button
 from bokeh.models import SingleIntervalTicker
 from bokeh.core.property.validation import validate
 from tornado import gen
 from bokeh.transform import dodge
+
 
 
 EEG_SRATE = 250  # Hz
@@ -47,7 +50,11 @@ class Dashboard:
         self.rr_estimator = None
         self.win_length = WIN_LENGTH
         self.mode = mode
-
+        #Recording mode
+        self.recording=False
+        self.recordings=0
+        self.record_dat=self.loadall('r_ExG')
+        
         # Init ExG data source
         exg_temp = np.zeros((n_chan, 2))
         exg_temp[:, 0] = self.offsets[:, 0]
@@ -121,6 +128,32 @@ class Dashboard:
         self.doc.add_periodic_callback(self._update_fft, 2000)
         self.doc.add_periodic_callback(self._update_heart_rate, 2000)
 
+    def loadall(self,filename):
+        inputs=[]
+        with open(filename, "rb") as f:
+            while True:
+                try:
+                    inputs.append(pickle.load(f))
+                except EOFError:
+                    break
+        outputs=pd.DataFrame()
+        for i in inputs:
+            outputs=outputs.append(pd.DataFrame(i))
+        return(outputs)
+            
+    
+    def record_mode(self):
+        if self.start_rec.label == 'Start':
+            self.recording=True
+            self.file_dump = open('r_ExG', 'wb+')
+            self.start_rec.label = 'Stop'
+            self.recordings=self.recordings+1
+            
+        else:
+            self.recording=False
+            self.start_rec.label = 'Start'
+            self.file_dump.close()
+            self.record_dat=self.loadall('r_ExG')
 
     @gen.coroutine
     def update_exg(self, time_vector, ExG):
@@ -136,6 +169,8 @@ class Dashboard:
         ExG = self.offsets + ExG / self.y_unit
         new_data = dict(zip(self.chan_key_list, ExG))
         new_data['t'] = time_vector
+        if self.recording==True:
+            pickle.dump(new_data,self.file_dump)
         self.exg_source.stream(new_data, rollover=2 * EEG_SRATE * WIN_LENGTH)
 
     @gen.coroutine
@@ -385,7 +420,15 @@ class Dashboard:
         # EEG/ECG Radio button
         self.mode_control = RadioButtonGroup(labels=MODE_LIST, active=0)
         self.mode_control.on_click(self._change_mode)
+         
+        # Start Recording
+        self.start_rec = Button(label="Start")
+        self.start_rec.on_click(self.record_mode)
 
+        self.stop_rec = Button(label="Export")
+        
+        self.stop_rec.js_on_click(CustomJS(args=dict(source=ColumnDataSource(data=self.record_dat)),code=open(join(dirname(__file__), "download.js")).read()))
+        
         self.t_range = Select(title="Time window", value="10 s", options=list(TIME_RANGE_MENU.keys()), width=210)
         self.t_range.on_change('value', self._change_t_range)
         self.y_scale = Select(title="Y-axis Scale", value="1 mV", options=list(SCALE_MENU.keys()), width=210)
@@ -415,7 +458,7 @@ class Dashboard:
 
         # Add widgets to the doc
         m_widgetbox = widgetbox([self.mode_control, self.y_scale, self.t_range, self.heart_rate,
-                                 self.battery, self.temperature, self.light, self.firmware], width=220)
+                                 self.battery, self.temperature, self.light, self.firmware,self.start_rec,self.stop_rec], width=220)
         return m_widgetbox
 
     def _set_t_range(self, t_length):
@@ -462,7 +505,7 @@ if __name__ == '__main__':
             m_dashboard.doc.add_next_tick_callback(
                 partial(m_dashboard.update_orn, timestamp=T, orn_data=np.random.rand(9)))
 
-            time.sleep(0.2)
+            time.sleep(0.05)
 
 
     thread = Thread(target=my_loop)
